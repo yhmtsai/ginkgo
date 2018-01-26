@@ -112,7 +112,7 @@ std::unique_ptr<LinOp> Hyb<ValueType, IndexType>::clone_type() const
     return std::unique_ptr<LinOp>(
         new Hyb(this->get_executor(), this->get_num_rows(),
                 this->get_num_cols(), this->get_num_stored_elements(),
-                this->get_const_max_nnz_row()));
+                this->get_const_max_nnz_row(), this->get_const_coo_nnz()));
 }
 
 
@@ -122,7 +122,9 @@ void Hyb<ValueType, IndexType>::clear()
     this->set_dimensions(0, 0, 0);
     values_.clear();
     col_idxs_.clear();
+    row_idxs_.clear();
     max_nnz_row_ = 0;
+    coo_nnz_ = 0;
 }
 
 
@@ -132,8 +134,9 @@ void Hyb<ValueType, IndexType>::convert_to(Hyb *other) const
     other->set_dimensions(this);
     other->values_ = values_;
     other->col_idxs_ = col_idxs_;
-    // other->row_ptrs_ = row_ptrs_;
+    other->row_idxs_ = row_idxs_;
     other->max_nnz_row_ = max_nnz_row_;
+    other->coo_nnz_ = coo_nnz_;
 }
 
 
@@ -143,8 +146,9 @@ void Hyb<ValueType, IndexType>::move_to(Hyb *other)
     other->set_dimensions(this);
     other->values_ = std::move(values_);
     other->col_idxs_ = std::move(col_idxs_);
-    // other->row_ptrs_ = std::move(row_ptrs_);
+    other->row_idxs_ = std::move(row_idxs_);
     other->max_nnz_row_ = std::move(max_nnz_row_);
+    other->coo_nnz_ = std::move(coo_nnz_);
 }
 
 
@@ -184,13 +188,20 @@ void Hyb<ValueType, IndexType>::read_from_mtx(const std::string &filename)
         nnz += (std::get<2>(elem) != zero<ValueType>());
         nnz_row.at(std::get<0>(elem))++;
     }
-    index_type max_nnz_row = 0;
+    index_type max_nnz_row = data.num_cols/2;
+    index_type coo_nnz = 0;
+    // This is from Implementing Sparse Matrix-Vector Multiplication on
+    // Throuput-Oriented Processors
+    // index_type threshold = std::max(4096, data.num_rows/3);
+    // index_type threshold = data.num_cols/2;
     for (const auto &elem : nnz_row) {
-        max_nnz_row = std::max(max_nnz_row, elem);
+        // max_nnz_row = std::max(max_nnz_row, elem);
+        coo_nnz += (elem>max_nnz_row)*(elem-max_nnz_row);
     }
     auto tmp = create(this->get_executor()->get_master(), data.num_rows,
-                      data.num_cols, nnz, max_nnz_row);
-    size_type ind = 0;
+                      data.num_cols, nnz, max_nnz_row, coo_nnz);
+    size_type ind = 0, coo_ind = 0;
+    index_type prefix = data.num_rows * max_nnz_row;
     int n = data.nonzeros.size();
     for (size_type row = 0; row < data.num_rows; row++) {
         size_type col = 0;
@@ -211,26 +222,20 @@ void Hyb<ValueType, IndexType>::read_from_mtx(const std::string &filename)
             tmp->get_values()[hyb_ind] = 0;
             tmp->get_col_idxs()[hyb_ind] = tmp->get_col_idxs()[hyb_ind-data.num_rows];
         }
+        for (ind; ind < n; ind++) {
+            if (std::get<0>(data.nonzeros[ind]) > row) {
+                break;
+            }
+            auto val = std::get<2>(data.nonzeros[ind]);
+            if (val != zero<ValueType>()) {
+                tmp->get_values()[prefix+coo_ind] = val;
+                tmp->get_col_idxs()[prefix+coo_ind] = std::get<1>(data.nonzeros[ind]);
+                tmp->get_row_idxs()[coo_ind] = std::get<1>(data.nonzeros[ind]);
+                coo_ind++;
+            }
+        }
     }
     tmp->move_to(this);
-    // size_type ind = 0;
-    // size_type cur_ptr = 0;
-    // tmp->get_row_ptrs()[0] = cur_ptr;
-    // for (size_type row = 0; row < data.num_rows; ++row) {
-    //     for (; ind < data.nonzeros.size(); ++ind) {
-    //         if (std::get<0>(data.nonzeros[ind]) > row) {
-    //             break;
-    //         }
-    //         auto val = std::get<2>(data.nonzeros[ind]);
-    //         if (val != zero<ValueType>()) {
-    //             tmp->get_values()[cur_ptr] = val;
-    //             tmp->get_col_idxs()[cur_ptr] = std::get<1>(data.nonzeros[ind]);
-    //             ++cur_ptr;
-    //         }
-    //     }
-    //     tmp->get_row_ptrs()[row + 1] = cur_ptr;
-    // }
-    // tmp->move_to(this);
 }
 
 

@@ -31,7 +31,7 @@ ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ******************************<GINKGO LICENSE>*******************************/
 
-#include <core/matrix/ell.hpp>
+#include <core/matrix/hyb.hpp>
 
 
 #include <gtest/gtest.h>
@@ -40,30 +40,31 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 namespace {
 
 
-class Ell : public ::testing::Test {
+class Hyb : public ::testing::Test {
 protected:
-    using Mtx = gko::matrix::Ell<>;
+    using Mtx = gko::matrix::Hyb<>;
 
-    Ell()
+    Hyb()
         : exec(gko::ReferenceExecutor::create()),
-          mtx(gko::matrix::Ell<>::create(exec, 2, 3, 4, 3))
+          mtx(gko::matrix::Hyb<>::create(exec, 2, 3, 4, 1, 2))
     {
         Mtx::value_type *v = mtx->get_values();
         Mtx::index_type *c = mtx->get_col_idxs();
+        Mtx::index_type *r = mtx->get_row_idxs();
         Mtx::index_type n = mtx->get_max_nnz_row();
-        n = 3;
+        Mtx::index_type coo = mtx->get_coo_nnz();
+        n = 1;
+        coo = 2;
         c[0] = 0;
         c[1] = 1;
         c[2] = 1;
-        c[3] = 1;
-        c[4] = 2;
-        c[5] = 1;
+        c[3] = 2;
+        r[0] = 0;
+        r[1] = 0;
         v[0] = 1.0;
         v[1] = 5.0;
         v[2] = 3.0;
-        v[3] = 0.0;
-        v[4] = 2.0;
-        v[5] = 0.0;
+        v[3] = 2.0;
     }
 
     std::shared_ptr<const gko::Executor> exec;
@@ -73,23 +74,24 @@ protected:
     {
         auto v = m->get_const_values();
         auto c = m->get_const_col_idxs();
+        auto r = m->get_const_row_idxs();
         auto n = m->get_const_max_nnz_row();
+        auto coo = m->get_const_coo_nnz();
         ASSERT_EQ(m->get_num_rows(), 2);
         ASSERT_EQ(m->get_num_cols(), 3);
         ASSERT_EQ(m->get_num_stored_elements(), 4);
-        EXPECT_EQ(n, 3);
+        EXPECT_EQ(coo, 2);
+        EXPECT_EQ(n, 1);
         EXPECT_EQ(c[0], 0);
         EXPECT_EQ(c[1], 1);
         EXPECT_EQ(c[2], 1);
-        EXPECT_EQ(c[3], 1);
-        EXPECT_EQ(c[4], 2);
-        EXPECT_EQ(c[5], 1);
+        EXPECT_EQ(c[3], 2);
+        EXPECT_EQ(r[0], 0);
+        EXPECT_EQ(r[1], 0);
         EXPECT_EQ(v[0], 1.0);
         EXPECT_EQ(v[1], 5.0);
         EXPECT_EQ(v[2], 3.0);
-        EXPECT_EQ(v[3], 0.0);
-        EXPECT_EQ(v[4], 2.0);
-        EXPECT_EQ(v[5], 0.0);
+        EXPECT_EQ(v[3], 2.0);
     }
 
     void assert_empty(const Mtx *m)
@@ -99,12 +101,14 @@ protected:
         ASSERT_EQ(m->get_num_stored_elements(), 0);
         ASSERT_EQ(m->get_const_values(), nullptr);
         ASSERT_EQ(m->get_const_col_idxs(), nullptr);
+        ASSERT_EQ(m->get_const_row_idxs(), nullptr);
         ASSERT_EQ(m->get_const_max_nnz_row(), 0);
+        ASSERT_EQ(m->get_const_coo_nnz(), 0);
     }
 };
 
 
-TEST_F(Ell, KnowsItsSize)
+TEST_F(Hyb, KnowsItsSize)
 {
     ASSERT_EQ(mtx->get_num_rows(), 2);
     ASSERT_EQ(mtx->get_num_cols(), 3);
@@ -112,10 +116,10 @@ TEST_F(Ell, KnowsItsSize)
 }
 
 
-TEST_F(Ell, ContainsCorrectData) { assert_equal_to_original_mtx(mtx.get()); }
+TEST_F(Hyb, ContainsCorrectData) { assert_equal_to_original_mtx(mtx.get()); }
 
 
-TEST_F(Ell, CanBeEmpty)
+TEST_F(Hyb, CanBeEmpty)
 {
     auto mtx = Mtx::create(exec);
 
@@ -123,7 +127,7 @@ TEST_F(Ell, CanBeEmpty)
 }
 
 
-TEST_F(Ell, CanBeCopied)
+TEST_F(Hyb, CanBeCopied)
 {
     auto copy = Mtx::create(exec);
 
@@ -135,7 +139,7 @@ TEST_F(Ell, CanBeCopied)
 }
 
 
-TEST_F(Ell, CanBeMoved)
+TEST_F(Hyb, CanBeMoved)
 {
     auto copy = Mtx::create(exec);
 
@@ -145,7 +149,7 @@ TEST_F(Ell, CanBeMoved)
 }
 
 
-TEST_F(Ell, CanBeCloned)
+TEST_F(Hyb, CanBeCloned)
 {
     auto clone = mtx->clone();
 
@@ -155,7 +159,7 @@ TEST_F(Ell, CanBeCloned)
 }
 
 
-TEST_F(Ell, CanBeCleared)
+TEST_F(Hyb, CanBeCleared)
 {
     mtx->clear();
 
@@ -163,7 +167,7 @@ TEST_F(Ell, CanBeCleared)
 }
 
 
-TEST_F(Ell, CanBeReadFromMtx)
+TEST_F(Hyb, CanBeReadFromMtx)
 {
     auto m = Mtx::create(exec);
 

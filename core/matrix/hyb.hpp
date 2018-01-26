@@ -87,10 +87,11 @@ public:
     static std::unique_ptr<Hyb> create(std::shared_ptr<const Executor> exec,
                                        size_type num_rows, size_type num_cols,
                                        size_type num_nonzeros,
-                                       size_type max_nnz_row)
+                                       size_type max_nnz_row,
+                                       size_type coo_nnz)
     {
         return std::unique_ptr<Hyb>(
-            new Hyb(exec, num_rows, num_cols, num_nonzeros, max_nnz_row));
+            new Hyb(exec, num_rows, num_cols, num_nonzeros, max_nnz_row, coo_nnz));
     }
 
     /**
@@ -100,7 +101,7 @@ public:
      */
     static std::unique_ptr<Hyb> create(std::shared_ptr<const Executor> exec)
     {
-        return create(exec, 0, 0, 0, 0);
+        return create(exec, 0, 0, 0, 0, 0);
     }
 
     void copy_from(const LinOp *other) override;
@@ -165,6 +166,25 @@ public:
     }
 
     /**
+     * Returns the column indexes of the matrix.
+     *
+     * @return the column indexes of the matrix.
+     */
+    index_type *get_row_idxs() noexcept { return row_idxs_.get_data(); }
+
+    /**
+     * @copydoc Hyb::get_col_idxs()
+     *
+     * @note This is the constant version of the function, which can be
+     *       significantly more memory efficient than the non-constant version,
+     *       so always prefer this version.
+     */
+    const index_type *get_const_row_idxs() const noexcept
+    {
+        return row_idxs_.get_const_data();
+    }
+
+    /**
      * Returns the maximum number of one row.
      *
      * @return the maximum number of one row.
@@ -182,40 +202,44 @@ public:
     {
         return max_nnz_row_;
     }
+
+    /**
+     * Returns the maximum number of one row.
+     *
+     * @return the maximum number of one row.
+     */
+    index_type get_coo_nnz() noexcept { return coo_nnz_; }
+
+    /**
+     * @copydoc Hyb::get_coo_nnz()
+     *
+     * @note This is the constant version of the function, which can be
+     *       significantly more memory efficient than the non-constant version,
+     *       so always prefer this version.
+     */
+    const index_type get_const_coo_nnz() const noexcept
+    {
+        return coo_nnz_;
+    }
     
-    // /**
-    //  * Returns the row pointers of the matrix.
-    //  *
-    //  * @return the row pointers of the matrix.
-    //  */
-    // index_type *get_row_ptrs() noexcept { return row_ptrs_.get_data(); }
-
-    // /**
-    //  * @copydoc Hyb::get_row_ptrs()
-    //  *
-    //  * @note This is the constant version of the function, which can be
-    //  *       significantly more memory efficient than the non-constant version,
-    //  *       so always prefer this version.
-    //  */
-    // const index_type *get_const_row_ptrs() const noexcept
-    // {
-    //     return row_ptrs_.get_const_data();
-    // }
-
 protected:
     Hyb(std::shared_ptr<const Executor> exec, size_type num_rows,
-        size_type num_cols, size_type num_nonzeros, size_type max_nnz_row)
+        size_type num_cols, size_type num_nonzeros, size_type max_nnz_row,
+        size_type coo_nnz)
         : LinOp(exec, num_rows, num_cols, num_nonzeros),
-          values_(exec, num_rows*max_nnz_row),
-          col_idxs_(exec, num_rows*max_nnz_row),
-          max_nnz_row_(max_nnz_row)
+          values_(exec, num_rows*max_nnz_row + coo_nnz),
+          col_idxs_(exec, num_rows*max_nnz_row + coo_nnz),
+          row_idxs_(exec, coo_nnz),
+          max_nnz_row_(max_nnz_row),
+          coo_nnz_(coo_nnz)
     {}
 
 private:
     Array<value_type> values_;
     Array<index_type> col_idxs_;
-    // Array<index_type> row_ptrs_;
+    Array<index_type> row_idxs_;
     index_type max_nnz_row_;
+    index_type coo_nnz_;
 
 };
 
