@@ -31,7 +31,7 @@ ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ******************************<GINKGO LICENSE>*******************************/
 
-#include <core/matrix/ell.hpp>
+#include <core/matrix/hyb.hpp>
 
 
 #include <random>
@@ -50,12 +50,12 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 namespace {
 
 
-class Ell : public ::testing::Test {
+class Hyb : public ::testing::Test {
 protected:
-    using Mtx = gko::matrix::Ell<>;
+    using Mtx = gko::matrix::Hyb<>;
     using Vec = gko::matrix::Dense<>;
 
-    Ell() : rand_engine(42) {}
+    Hyb() : rand_engine(42) {}
 
     void SetUp() {
         ASSERT_GT(gko::GpuExecutor::get_num_devices(), 0);
@@ -114,7 +114,7 @@ protected:
 };
 
 
-TEST_F(Ell, SimpleApplyIsEquivalentToRef) {
+TEST_F(Hyb, SimpleApplyIsEquivalentToRef) {
     set_up_apply_data();
     mtx->apply(y.get(), expected.get());
     dmtx->apply(dy.get(), dresult.get());
@@ -124,7 +124,7 @@ TEST_F(Ell, SimpleApplyIsEquivalentToRef) {
     }
 
 
-TEST_F(Ell, AdvancedApplyIsEquivalentToRef) {
+TEST_F(Hyb, AdvancedApplyIsEquivalentToRef) {
         NOT_IMPLEMENTED;
     }
 

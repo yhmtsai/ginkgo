@@ -35,6 +35,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "core/matrix/csr_kernels.hpp"
 #include "core/matrix/dense_kernels.hpp"
 #include "core/matrix/ell_kernels.hpp"
+#include "core/matrix/hyb_kernels.hpp"
 #include "core/solver/bicgstab_kernels.hpp"
 #include "core/solver/cg_kernels.hpp"
 
@@ -218,6 +219,33 @@ GKO_INSTANTIATE_FOR_EACH_VALUE_AND_INDEX_TYPE(
     GKO_DECLARE_ELL_MOVE_TO_DENSE_KERNEL);
 
 }  // namespace ell
+
+namespace  hyb{
+
+template <typename ValueType, typename IndexType>
+GKO_DECLARE_HYB_SPMV_KERNEL(ValueType, IndexType)
+NOT_COMPILED(GKO_HOOK_MODULE);
+GKO_INSTANTIATE_FOR_EACH_VALUE_AND_INDEX_TYPE(GKO_DECLARE_HYB_SPMV_KERNEL);
+
+template <typename ValueType, typename IndexType>
+GKO_DECLARE_HYB_ADVANCED_SPMV_KERNEL(ValueType, IndexType)
+NOT_COMPILED(GKO_HOOK_MODULE);
+GKO_INSTANTIATE_FOR_EACH_VALUE_AND_INDEX_TYPE(
+    GKO_DECLARE_HYB_ADVANCED_SPMV_KERNEL);
+
+template <typename ValueType, typename IndexType>
+GKO_DECLARE_HYB_CONVERT_TO_DENSE_KERNEL(ValueType, IndexType)
+NOT_COMPILED(GKO_HOOK_MODULE);
+GKO_INSTANTIATE_FOR_EACH_VALUE_AND_INDEX_TYPE(
+    GKO_DECLARE_HYB_CONVERT_TO_DENSE_KERNEL);
+
+template <typename ValueType, typename IndexType>
+GKO_DECLARE_HYB_MOVE_TO_DENSE_KERNEL(ValueType, IndexType)
+NOT_COMPILED(GKO_HOOK_MODULE);
+GKO_INSTANTIATE_FOR_EACH_VALUE_AND_INDEX_TYPE(
+    GKO_DECLARE_HYB_MOVE_TO_DENSE_KERNEL);
+
+}  // namespace hyb
 }  // namespace GKO_HOOK_MODULE
 }  // namespace kernels
 }  // namespace gko
