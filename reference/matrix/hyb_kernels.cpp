@@ -54,6 +54,10 @@ void spmv(const matrix::Hyb<ValueType, IndexType> *a,
     auto vals = a->get_const_values();
     auto max_nnz_row = a->get_const_max_nnz_row();
     auto arows = a->get_num_rows();
+    auto coo_vals = vals+arows*max_nnz_row;
+    auto coo_col = col_idxs+arows*max_nnz_row;
+    auto coo_row = a->get_const_row_idxs();
+    auto coo_nnz = a->get_const_coo_nnz();
     for (size_type row = 0; row < arows; row++) {
         for (size_type j = 0; j < c->get_num_cols(); j++) {
             c->at(row, j) = zero<ValueType>();
@@ -64,6 +68,11 @@ void spmv(const matrix::Hyb<ValueType, IndexType> *a,
             for (size_type j = 0; j < c->get_num_cols(); j++) {
                 c->at(row, j) += val*b->at(col, j);
             }
+        }
+    }
+    for (size_type i = 0; i < coo_nnz; i++) {
+        for (size_type j = 0; j < c->get_num_cols(); j++) {
+                c->at(coo_row[i], j) += coo_vals[i]*b->at(coo_col[i], j);
         }
     }
     // for (size_type row = 0; row < a->get_num_rows(); ++row) {
