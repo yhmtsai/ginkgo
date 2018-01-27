@@ -91,6 +91,28 @@ __device__ cuComplex
     return *address;
 }
 
+__device__ thrust::complex<float>
+    atomicAdd(thrust::complex<float>* address, thrust::complex<float> val)
+{
+    cuComplex* cuaddr = reinterpret_cast<cuComplex*>(address);
+    cuComplex* cuval = reinterpret_cast<cuComplex*>(&val);
+    atomicAdd(cuaddr, *cuval);
+    return *address;
+}
+
+__device__ thrust::complex<double>
+    atomicAdd(thrust::complex<double>* address, thrust::complex<double> val)
+{
+    cuDoubleComplex* cuaddr = reinterpret_cast<cuDoubleComplex*>(address);
+    cuDoubleComplex* cuval = reinterpret_cast<cuDoubleComplex*>(&val);
+    atomicAdd(cuaddr, *cuval);
+    return *address;
+}
+
+// __device__ int wrap_any_sync(unsigned mask, int predicate) {
+//     return __any_sync(mask, predicate);
+// }
+
 namespace gko {
 namespace kernels {
 namespace gpu {
@@ -101,7 +123,7 @@ constexpr int default_block_size = 512;
 
 
 template <typename ValueType, typename IndexType>
-__global__ __launch_bounds__(default_block_size) void spmv_kernel(
+__global__ __launch_bounds__(default_block_size) void ell_spmv_kernel(
     size_type num_rows, IndexType max_nnz_row,
     const ValueType *__restrict__ val, const IndexType *__restrict__ col,
     const ValueType *__restrict__ b,
@@ -121,6 +143,56 @@ __global__ __launch_bounds__(default_block_size) void spmv_kernel(
 }
 
 template <typename ValueType, typename IndexType>
+__global__ __launch_bounds__(32) void coo_spmv_kernel(
+    const size_type num_rows, const IndexType nnz, const size_type num_lines,
+    const ValueType *__restrict__ val, const IndexType *__restrict__ col,
+    const IndexType *__restrict__ row,
+    const ValueType *__restrict__ b,
+    ValueType *__restrict__ c)
+{
+    // need to check whether it is correct
+    extern __shared__ __align__(sizeof(ValueType)) unsigned char smem[];
+    ValueType *temp_val = reinterpret_cast<ValueType *>(smem);
+    __shared__ IndexType temp_row[32];
+    __shared__ IndexType temp_col[32];
+
+    
+    // Assume 32 | nnz
+    const auto start = static_cast<size_type>(blockDim.x) * blockIdx.x * num_lines + threadIdx.x;
+    auto num = (nnz-start)/32;
+    num = (num < num_lines) ? num : num_lines;
+    
+    ValueType scan_val;
+    IndexType ind;
+    int is_scan = 0;
+    temp_val[threadIdx.x] = zero<ValueType>();
+    __syncthreads();
+    for (int i = 0; i < num; i++) {
+        ind = start + i*32;
+        temp_row[threadIdx.x] = row[ind];
+        temp_col[threadIdx.x] = col[ind];
+        temp_val[threadIdx.x] += val[ind]*b[temp_col[threadIdx.x]];
+        // segmented scan
+        is_scan = __any_sync(0xffffffff,
+                i == num_lines-1 || temp_col[threadIdx.x] < col[ind+32]);
+        if (is_scan) {
+            scan_val = 0;
+            if (threadIdx.x == 0 || temp_row[threadIdx.x] != temp_row[threadIdx.x-1]) {
+                for (int i = threadIdx.x; temp_row[i] == temp_row[threadIdx.x] ; i++) {
+                    scan_val += temp_val[i];
+                    temp_val[i] = zero<ValueType>();
+                }
+                // c[temp_row[threadIdx.x]] += scan_val;
+                
+                atomicAdd(&(c[temp_row[threadIdx.x]]), scan_val);
+                temp_val[threadIdx.x] = 0;
+            }
+        }
+    }
+
+}
+
+template <typename ValueType, typename IndexType>
 void spmv(const matrix::Hyb<ValueType, IndexType> *a,
           const matrix::Dense<ValueType> *b, matrix::Dense<ValueType> *c) {
         
@@ -128,9 +200,19 @@ void spmv(const matrix::Hyb<ValueType, IndexType> *a,
     const dim3 grid_size(
         ceildiv(a->get_num_rows(), block_size.x), 1, 1);
 
-    spmv_kernel<<<grid_size, block_size, 0, 0>>>(
+    ell_spmv_kernel<<<grid_size, block_size, 0, 0>>>(
         a->get_num_rows(), a->get_const_max_nnz_row(),
         as_cuda_type(a->get_const_values()), a->get_const_col_idxs(),
+        as_cuda_type(b->get_const_values()),
+        as_cuda_type(c->get_values()));
+    int w = 8*2880/32;
+    const auto start = a->get_num_rows()*a->get_const_max_nnz_row();
+    const dim3 coo_block(32, 1, 1);
+    const dim3 coo_grid(w, 1, 1);
+    coo_spmv_kernel<<<coo_grid, coo_block, 32*sizeof(ValueType)>>>(
+        a->get_num_rows(), a->get_const_coo_nnz(), 2,
+        as_cuda_type(a->get_const_values()+start), a->get_const_col_idxs()+start,
+        as_cuda_type(a->get_const_row_idxs()),
         as_cuda_type(b->get_const_values()),
         as_cuda_type(c->get_values()));
 }
