@@ -39,12 +39,65 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "gpu/base/cusparse_bindings.hpp"
 #include "gpu/base/types.hpp"
 
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ < 600
+__device__ double atomicAdd(double* address, double val)
+{
+    unsigned long long int* address_as_ull =
+                              (unsigned long long int*)address;
+    unsigned long long int old = *address_as_ull, assumed;
+
+    do {
+        assumed = old;
+        old = atomicCAS(address_as_ull, assumed,
+                        __double_as_longlong(val +
+                               __longlong_as_double(assumed)));
+
+    // Note: uses integer comparison to avoid hang in case of NaN (since NaN != NaN)
+    } while (assumed != old);
+
+    return __longlong_as_double(old);
+}
+#endif
+
+__device__ cuDoubleComplex
+    atomicAdd(cuDoubleComplex* address, cuDoubleComplex val)
+{
+    // Seperate to real part and imag part
+    // real part
+    double *part_addr = &(address->x);
+    double part_val = val.x;
+    atomicAdd(part_addr, part_val);
+
+    // imag part
+    part_addr = &(address->y);
+    part_val = val.y;
+    atomicAdd(part_addr, part_val);
+    return *address;
+}
+
+__device__ cuComplex
+    atomicAdd(cuComplex* address, cuComplex val)
+{
+    // Seperate to real part and imag part
+    // real part
+    float *part_addr = &(address->x);
+    float part_val = val.x;
+    atomicAdd(part_addr, part_val);
+
+    // imag part
+    part_addr = &(address->y);
+    part_val = val.y;
+    atomicAdd(part_addr, part_val);
+    return *address;
+}
+
 namespace gko {
 namespace kernels {
 namespace gpu {
 namespace hyb {
 
 constexpr int default_block_size = 512;
+
 
 
 template <typename ValueType, typename IndexType>
