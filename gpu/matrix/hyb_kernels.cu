@@ -38,6 +38,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "core/base/math.hpp"
 #include "gpu/base/cusparse_bindings.hpp"
 #include "gpu/base/types.hpp"
+#include <iostream>
 
 #if defined(__CUDA_ARCH__) && __CUDA_ARCH__ < 600
 __device__ double atomicAdd(double* address, double val)
@@ -151,8 +152,9 @@ __global__ __launch_bounds__(32) void coo_spmv_kernel(
     ValueType *__restrict__ c)
 {
     // need to check whether it is correct
-    extern __shared__ __align__(sizeof(ValueType)) unsigned char smem[];
-    ValueType *temp_val = reinterpret_cast<ValueType *>(smem);
+    // extern __shared__ __align__(sizeof(ValueType)) unsigned char smem[];
+    // ValueType *temp_val = reinterpret_cast<ValueType *>(smem);
+    __shared__ ValueType temp_val[32];
     __shared__ IndexType temp_row[32];
     __shared__ IndexType temp_col[32];
 
@@ -169,12 +171,12 @@ __global__ __launch_bounds__(32) void coo_spmv_kernel(
     __syncthreads();
     for (int i = 0; i < num; i++) {
         ind = start + i*32;
-        temp_row[threadIdx.x] = (ind < nnz) ? row[ind] : 0;
-        temp_col[threadIdx.x] = (ind < nnz) ? col[ind] : 0;
+        temp_row[threadIdx.x] = (ind < nnz) ? row[ind] : row[nnz];
+        temp_col[threadIdx.x] = (ind < nnz) ? col[ind] : col[nnz];
         temp_val[threadIdx.x] += (ind < nnz) ? val[ind]*b[temp_col[threadIdx.x]] : 0;
         // segmented scan
         is_scan = __any_sync(0xffffffff,
-                i == num_lines-1 || temp_col[threadIdx.x] < col[ind+32]);
+                i == num_lines-1 || ind+32 >=nnz || temp_col[threadIdx.x] < col[ind+32]);
         if (is_scan) {
             scan_val = 0;
             if (threadIdx.x == 0 || temp_row[threadIdx.x] != temp_row[threadIdx.x-1]) {
@@ -199,22 +201,25 @@ void spmv(const matrix::Hyb<ValueType, IndexType> *a,
     const dim3 block_size(default_block_size, 1, 1);
     const dim3 grid_size(
         ceildiv(a->get_num_rows(), block_size.x), 1, 1);
-
+    
     ell_spmv_kernel<<<grid_size, block_size, 0, 0>>>(
         a->get_num_rows(), a->get_const_max_nnz_row(),
         as_cuda_type(a->get_const_values()), a->get_const_col_idxs(),
         as_cuda_type(b->get_const_values()),
         as_cuda_type(c->get_values()));
-    int w = 8*2880/32;
+    std::cout << "Step 1 \n";
+    int w = ceildiv(a->get_const_coo_nnz(), 32);
     const auto start = a->get_num_rows()*a->get_const_max_nnz_row();
     const dim3 coo_block(32, 1, 1);
+    std::cout << "w = " << w << "\n";
     const dim3 coo_grid(w, 1, 1);
-    coo_spmv_kernel<<<coo_grid, coo_block, 32*sizeof(ValueType)>>>(
-        a->get_num_rows(), a->get_const_coo_nnz(), 2,
+    coo_spmv_kernel<<<coo_grid, coo_block>>>(
+        a->get_num_rows(), a->get_const_coo_nnz(), 1,
         as_cuda_type(a->get_const_values()+start), a->get_const_col_idxs()+start,
         as_cuda_type(a->get_const_row_idxs()),
         as_cuda_type(b->get_const_values()),
         as_cuda_type(c->get_values()));
+    std::cout << "Step 2 \n";
 }
 
 
