@@ -3,8 +3,8 @@ set(SOURCES
     base/mtx_reader.cpp
     matrix/ell.cpp
     matrix/csr.cpp
-    matrix/dense.cpp
     matrix/hyb.cpp
+    matrix/dense.cpp
     solver/bicgstab.cpp
     solver/cg.cpp)
 

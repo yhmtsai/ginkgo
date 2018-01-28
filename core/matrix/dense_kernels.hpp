@@ -82,11 +82,22 @@ namespace kernels {
     void move_to_ell(matrix::Ell<_type, _prec> *other,     \
                      const matrix::Dense<_type> *source)
 
+#define GKO_DECLARE_DENSE_CONVERT_TO_HYB_KERNEL(_type, _prec) \
+    void convert_to_hyb(matrix::Hyb<_type, _prec> *other,     \
+                        const matrix::Dense<_type> *source)
+
+#define GKO_DECLARE_DENSE_MOVE_TO_HYB_KERNEL(_type, _prec) \
+    void move_to_hyb(matrix::Hyb<_type, _prec> *other,     \
+                     const matrix::Dense<_type> *source)
+
 #define GKO_DECLARE_DENSE_COUNT_NONZEROS_KERNEL(_type) \
     void count_nonzeros(const matrix::Dense<_type> *source, size_type *result)
 
 #define GKO_DECLARE_DENSE_COUNT_MAX_NNZ_ROW_KERNEL(_type) \
     void count_max_nnz_row(const matrix::Dense<_type> *source, size_type *result)
+
+#define GKO_DECLARE_DENSE_GET_HYB_PARAMETER_KERNEL(_type) \
+    void get_hyb_parameter(const matrix::Dense<_type> *source, size_type *result)
 
 #define DECLARE_ALL_AS_TEMPLATES                                   \
     template <typename ValueType>                                  \
@@ -107,10 +118,17 @@ namespace kernels {
     GKO_DECLARE_DENSE_CONVERT_TO_ELL_KERNEL(ValueType, IndexType); \
     template <typename ValueType, typename IndexType>              \
     GKO_DECLARE_DENSE_MOVE_TO_ELL_KERNEL(ValueType, IndexType);    \
+    template <typename ValueType, typename IndexType>              \
+    GKO_DECLARE_DENSE_CONVERT_TO_HYB_KERNEL(ValueType, IndexType); \
+    template <typename ValueType, typename IndexType>              \
+    GKO_DECLARE_DENSE_MOVE_TO_HYB_KERNEL(ValueType, IndexType);    \
     template <typename ValueType>                                  \
     GKO_DECLARE_DENSE_COUNT_NONZEROS_KERNEL(ValueType);            \
     template <typename ValueType>                                  \
-    GKO_DECLARE_DENSE_COUNT_MAX_NNZ_ROW_KERNEL(ValueType)
+    GKO_DECLARE_DENSE_COUNT_MAX_NNZ_ROW_KERNEL(ValueType);         \
+    template <typename ValueType>                                  \
+    GKO_DECLARE_DENSE_GET_HYB_PARAMETER_KERNEL(ValueType)
+
 
 namespace cpu {
 namespace dense {

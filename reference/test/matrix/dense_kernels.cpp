@@ -40,7 +40,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <core/base/exception.hpp>
 #include <core/base/executor.hpp>
 #include <core/matrix/csr.hpp>
-
+#include <core/matrix/hyb.hpp>
 
 namespace {
 
@@ -282,5 +282,60 @@ TEST_F(Dense, MovesToCsr)
     EXPECT_EQ(v[3], 5.0);
 }
 
+TEST_F(Dense, ConvertsToHyb)
+{
+    auto hyb_mtx = gko::matrix::Hyb<>::create(mtx4->get_executor());
+
+    mtx4->convert_to(hyb_mtx.get());
+
+    auto v = hyb_mtx->get_const_values();
+    auto c = hyb_mtx->get_const_col_idxs();
+    auto r = hyb_mtx->get_const_row_idxs();
+    auto n = hyb_mtx->get_const_max_nnz_row();
+    auto coo = hyb_mtx->get_const_coo_nnz();
+    ASSERT_EQ(hyb_mtx->get_num_rows(), 2);
+    ASSERT_EQ(hyb_mtx->get_num_cols(), 3);
+    ASSERT_EQ(hyb_mtx->get_num_stored_elements(), 4);
+    EXPECT_EQ(coo, 2);
+    EXPECT_EQ(n, 1);
+    EXPECT_EQ(c[0], 0);
+    EXPECT_EQ(c[1], 1);
+    EXPECT_EQ(c[2], 1);
+    EXPECT_EQ(c[3], 2);
+    EXPECT_EQ(r[0], 0);
+    EXPECT_EQ(r[1], 0);
+    EXPECT_EQ(v[0], 1.0);
+    EXPECT_EQ(v[1], 5.0);
+    EXPECT_EQ(v[2], 3.0);
+    EXPECT_EQ(v[3], 2.0);
+}
+
+TEST_F(Dense, MoveToHyb)
+{
+    auto hyb_mtx = gko::matrix::Hyb<>::create(mtx4->get_executor());
+
+    mtx4->move_to(hyb_mtx.get());
+
+    auto v = hyb_mtx->get_const_values();
+    auto c = hyb_mtx->get_const_col_idxs();
+    auto r = hyb_mtx->get_const_row_idxs();
+    auto n = hyb_mtx->get_const_max_nnz_row();
+    auto coo = hyb_mtx->get_const_coo_nnz();
+    ASSERT_EQ(hyb_mtx->get_num_rows(), 2);
+    ASSERT_EQ(hyb_mtx->get_num_cols(), 3);
+    ASSERT_EQ(hyb_mtx->get_num_stored_elements(), 4);
+    EXPECT_EQ(coo, 2);
+    EXPECT_EQ(n, 1);
+    EXPECT_EQ(c[0], 0);
+    EXPECT_EQ(c[1], 1);
+    EXPECT_EQ(c[2], 1);
+    EXPECT_EQ(c[3], 2);
+    EXPECT_EQ(r[0], 0);
+    EXPECT_EQ(r[1], 0);
+    EXPECT_EQ(v[0], 1.0);
+    EXPECT_EQ(v[1], 5.0);
+    EXPECT_EQ(v[2], 3.0);
+    EXPECT_EQ(v[3], 2.0);
+}
 
 }  // namespace

@@ -159,7 +159,7 @@ __global__ __launch_bounds__(32) void coo_spmv_kernel(
     
     // Assume 32 | nnz
     const auto start = static_cast<size_type>(blockDim.x) * blockIdx.x * num_lines + threadIdx.x;
-    auto num = (nnz-start)/32;
+    auto num = (nnz-start-1)/32+1;
     num = (num < num_lines) ? num : num_lines;
     
     ValueType scan_val;
@@ -169,9 +169,9 @@ __global__ __launch_bounds__(32) void coo_spmv_kernel(
     __syncthreads();
     for (int i = 0; i < num; i++) {
         ind = start + i*32;
-        temp_row[threadIdx.x] = row[ind];
-        temp_col[threadIdx.x] = col[ind];
-        temp_val[threadIdx.x] += val[ind]*b[temp_col[threadIdx.x]];
+        temp_row[threadIdx.x] = (ind < nnz) ? row[ind] : 0;
+        temp_col[threadIdx.x] = (ind < nnz) ? col[ind] : 0;
+        temp_val[threadIdx.x] += (ind < nnz) ? val[ind]*b[temp_col[threadIdx.x]] : 0;
         // segmented scan
         is_scan = __any_sync(0xffffffff,
                 i == num_lines-1 || temp_col[threadIdx.x] < col[ind+32]);

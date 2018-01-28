@@ -37,6 +37,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "core/base/math.hpp"
 #include "core/matrix/csr.hpp"
 #include "core/matrix/ell.hpp"
+#include "core/matrix/hyb.hpp"
 #include <iostream>
 
 namespace gko {
@@ -238,6 +239,62 @@ GKO_INSTANTIATE_FOR_EACH_VALUE_AND_INDEX_TYPE(
     GKO_DECLARE_DENSE_MOVE_TO_ELL_KERNEL);
 
 
+template <typename ValueType, typename IndexType>
+void convert_to_hyb(matrix::Hyb<ValueType, IndexType> *result,
+                    const matrix::Dense<ValueType> *source)
+{
+    auto num_rows = result->get_num_rows();
+    auto num_cols = result->get_num_cols();
+    auto num_nonzeros = result->get_num_stored_elements();
+
+    auto max_nnz_row = result->get_max_nnz_row();
+    auto col_idxs = result->get_col_idxs();
+    auto values = result->get_values();
+    auto coo_col = col_idxs + max_nnz_row * num_rows;
+    auto coo_val = values + max_nnz_row * num_rows;
+    auto coo_row = result->get_row_idxs();
+    size_type coo_ind = 0;
+    for (size_type row = 0; row < num_rows; ++row) {
+        size_type temp = 0;
+        size_type col = 0;
+        for (; col < num_cols && temp < max_nnz_row; ++col) {
+            auto val = source->at(row, col);
+            if (val != zero<ValueType>()) {
+                col_idxs[row+num_rows*temp] = col;
+                values[row+num_rows*temp] = val;
+                temp++;
+            }
+        }
+        for (; temp < max_nnz_row; temp++) {
+            values[row+num_rows*temp] = 0;
+            col_idxs[row+num_rows*temp] = col_idxs[row+num_rows*(temp-1)];  
+        }
+        for (; col < num_cols; ++col) {
+            auto val = source->at(row, col);
+            if (val != zero<ValueType>()) {
+                coo_col[coo_ind] = col;
+                coo_val[coo_ind] = val;
+                coo_row[coo_ind] = row;
+                coo_ind++;
+            }
+        }
+    }
+}
+
+GKO_INSTANTIATE_FOR_EACH_VALUE_AND_INDEX_TYPE(
+    GKO_DECLARE_DENSE_CONVERT_TO_HYB_KERNEL);
+
+
+template <typename ValueType, typename IndexType>
+void move_to_hyb(matrix::Hyb<ValueType, IndexType> *result,
+                 const matrix::Dense<ValueType> *source)
+{
+    reference::dense::convert_to_hyb(result, source);
+}
+
+GKO_INSTANTIATE_FOR_EACH_VALUE_AND_INDEX_TYPE(
+    GKO_DECLARE_DENSE_MOVE_TO_HYB_KERNEL);
+
 template <typename ValueType>
 void count_nonzeros(const matrix::Dense<ValueType> *source, size_type *result)
 {
@@ -275,6 +332,38 @@ void count_max_nnz_row(const matrix::Dense<ValueType> *source, size_type *result
 }
 
 GKO_INSTANTIATE_FOR_EACH_VALUE_TYPE(GKO_DECLARE_DENSE_COUNT_MAX_NNZ_ROW_KERNEL);
+
+template <typename ValueType>
+void get_hyb_parameter(const matrix::Dense<ValueType> *source, size_type *result)
+{
+    auto num_rows = source->get_num_rows();
+    auto num_cols = source->get_num_cols();
+    auto temp = 0;
+    size_type *row_num = new size_type[num_rows];
+    auto max_nnz_row = 0;
+    auto coo_nnz = 0;
+    for (size_type row = 0; row < num_rows; ++row) {
+        temp = 0;
+        for (size_type col = 0; col < num_cols; ++col) {
+            temp += (source->at(row, col) != zero<ValueType>());
+        }
+        row_num[row] = temp;
+        max_nnz_row = (max_nnz_row < temp) ? temp : max_nnz_row;
+    }
+    // Decide the threshold
+    if (max_nnz_row > num_cols/2) {
+        max_nnz_row = num_cols/2;
+        for (size_type row = 0; row < num_rows; row++) {
+            coo_nnz += (row_num[row] > max_nnz_row) ? row_num[row] - max_nnz_row : 0;
+        }
+    }
+    result[0] = max_nnz_row;
+    result[1] = coo_nnz;
+
+    delete [] row_num;
+}
+
+GKO_INSTANTIATE_FOR_EACH_VALUE_TYPE(GKO_DECLARE_DENSE_GET_HYB_PARAMETER_KERNEL);
 
 }  // namespace dense
 }  // namespace reference

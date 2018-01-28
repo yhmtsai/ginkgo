@@ -41,8 +41,9 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "core/base/utils.hpp"
 #include "core/matrix/csr.hpp"
 #include "core/matrix/ell.hpp"
+#include "core/matrix/hyb.hpp"
 #include "core/matrix/dense_kernels.hpp"
-
+#include <iostream>
 namespace gko {
 namespace matrix {
 
@@ -59,6 +60,7 @@ struct TemplatedOperation {
     GKO_REGISTER_OPERATION(compute_dot, dense::compute_dot<ValueType>);
     GKO_REGISTER_OPERATION(count_nonzeros, dense::count_nonzeros<ValueType>);
     GKO_REGISTER_OPERATION(count_max_nnz_row, dense::count_max_nnz_row<ValueType>);
+    GKO_REGISTER_OPERATION(get_hyb_parameter, dense::get_hyb_parameter<ValueType>);
 };
 
 
@@ -72,6 +74,12 @@ template <typename... TplArgs>
 struct TemplatedOperationEll {
     GKO_REGISTER_OPERATION(convert_to_ell, dense::convert_to_ell<TplArgs...>);
     GKO_REGISTER_OPERATION(move_to_ell, dense::move_to_ell<TplArgs...>);
+};
+
+template <typename... TplArgs>
+struct TemplatedOperationHyb {
+    GKO_REGISTER_OPERATION(convert_to_hyb, dense::convert_to_hyb<TplArgs...>);
+    GKO_REGISTER_OPERATION(move_to_hyb, dense::move_to_hyb<TplArgs...>);
 };
 
 
@@ -109,6 +117,27 @@ inline void conversion_helper(Ell<ValueType, IndexType> *result,
     auto tmp = Ell<ValueType, IndexType>::create(
         exec, source->get_num_rows(), source->get_num_cols(),
         *num_stored_nonzeros.get_data(), *num_stored_max_nnz_row.get_data());
+    exec->run(op(tmp.get(), source));
+    tmp->move_to(result);
+}
+
+template <typename ValueType, typename IndexType, typename MatrixType,
+          typename OperationType>
+inline void conversion_helper(Hyb<ValueType, IndexType> *result,
+                              MatrixType *source, const OperationType &op)
+{
+    auto exec = source->get_executor();
+
+    Array<size_type> num_stored_nonzeros(exec, 1);
+    Array<size_type> hyb_parameter(exec, 2);
+    exec->run(TemplatedOperation<ValueType>::make_count_nonzeros_operation(
+        source, num_stored_nonzeros.get_data()));
+    exec->run(TemplatedOperation<ValueType>::make_get_hyb_parameter_operation(
+        source, hyb_parameter.get_data()));
+    auto tmp = Hyb<ValueType, IndexType>::create(
+        exec, source->get_num_rows(), source->get_num_cols(),
+        *num_stored_nonzeros.get_data(),
+        hyb_parameter.get_data()[0], hyb_parameter.get_data()[1]);
     exec->run(op(tmp.get(), source));
     tmp->move_to(result);
 }
@@ -327,6 +356,48 @@ void Dense<ValueType>::move_to(Ell<ValueType, int64> *result)
                                                 Dense<ValueType> *&>);
 }
 
+template <typename ValueType>
+void Dense<ValueType>::convert_to(Hyb<ValueType, int32> *result) const
+{
+    conversion_helper(
+        result, this,
+        TemplatedOperationHyb<ValueType, int32>::
+            template make_convert_to_hyb_operation<decltype(result),
+                                                   const Dense<ValueType> *&>);
+}
+
+
+template <typename ValueType>
+void Dense<ValueType>::move_to(Hyb<ValueType, int32> *result)
+{
+    conversion_helper(
+        result, this,
+        TemplatedOperationHyb<ValueType, int32>::
+            template make_move_to_hyb_operation<decltype(result),
+                                                Dense<ValueType> *&>);
+}
+
+
+template <typename ValueType>
+void Dense<ValueType>::convert_to(Hyb<ValueType, int64> *result) const
+{
+    conversion_helper(
+        result, this,
+        TemplatedOperationHyb<ValueType, int64>::
+            template make_convert_to_hyb_operation<decltype(result),
+                                                   const Dense<ValueType> *&>);
+}
+
+
+template <typename ValueType>
+void Dense<ValueType>::move_to(Hyb<ValueType, int64> *result)
+{
+    conversion_helper(
+        result, this,
+        TemplatedOperationHyb<ValueType, int64>::
+            template make_move_to_hyb_operation<decltype(result),
+                                                Dense<ValueType> *&>);
+}
 
 template <typename ValueType>
 void Dense<ValueType>::read_from_mtx(const std::string &filename)
