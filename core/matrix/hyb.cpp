@@ -221,7 +221,8 @@ void Hyb<ValueType, IndexType>::read_from_mtx(const std::string &filename)
         for (auto i = col; i < max_nnz_row; i++) {
             auto hyb_ind = row+i*data.num_rows;
             tmp->get_values()[hyb_ind] = 0;
-            tmp->get_col_idxs()[hyb_ind] = tmp->get_col_idxs()[hyb_ind-data.num_rows];
+            tmp->get_col_idxs()[hyb_ind] = (i == 0) ?
+                0 : tmp->get_col_idxs()[hyb_ind-data.num_rows];
         }
         for (ind; ind < n; ind++) {
             if (std::get<0>(data.nonzeros[ind]) > row) {

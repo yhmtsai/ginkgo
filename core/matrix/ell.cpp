@@ -209,7 +209,8 @@ void Ell<ValueType, IndexType>::read_from_mtx(const std::string &filename)
         for (auto i = col; i < max_nnz_row; i++) {
             auto ell_ind = row+i*data.num_rows;
             tmp->get_values()[ell_ind] = 0;
-            tmp->get_col_idxs()[ell_ind] = tmp->get_col_idxs()[ell_ind-data.num_rows];
+            tmp->get_col_idxs()[ell_ind] = (i == 0) ?
+                0 : tmp->get_col_idxs()[ell_ind-data.num_rows];
         }
     }
     tmp->move_to(this);

@@ -219,7 +219,8 @@ void convert_to_ell(matrix::Ell<ValueType, IndexType> *result,
         }
         for (; temp < max_nnz_row; temp++) {
             values[row+num_rows*temp] = 0;
-            col_idxs[row+num_rows*temp] = col_idxs[row+num_rows*(temp-1)];  
+            col_idxs[row+num_rows*temp] = (temp == 0) ?
+                0 : col_idxs[row+num_rows*(temp-1)];
         }
     }
 }
@@ -267,7 +268,8 @@ void convert_to_hyb(matrix::Hyb<ValueType, IndexType> *result,
         }
         for (; temp < max_nnz_row; temp++) {
             values[row+num_rows*temp] = 0;
-            col_idxs[row+num_rows*temp] = col_idxs[row+num_rows*(temp-1)];  
+            col_idxs[row+num_rows*temp] = (temp == 0) ?
+                0 : col_idxs[row+num_rows*(temp-1)];  
         }
         for (; col < num_cols; ++col) {
             auto val = source->at(row, col);
