@@ -186,7 +186,7 @@ void Hyb<ValueType, IndexType>::read_from_mtx(const std::string &filename)
     std::vector<index_type> nnz_row(data.num_rows, 0);
     for (const auto &elem : data.nonzeros) {
         nnz += (std::get<2>(elem) != zero<ValueType>());
-        nnz_row.at(std::get<0>(elem))++;
+        nnz_row.at(std::get<0>(elem)) += (std::get<2>(elem) != zero<ValueType>());
     }
     index_type max_nnz_row = data.num_cols/2;
     index_type coo_nnz = 0;
@@ -198,6 +198,7 @@ void Hyb<ValueType, IndexType>::read_from_mtx(const std::string &filename)
         // max_nnz_row = std::max(max_nnz_row, elem);
         coo_nnz += (elem>max_nnz_row)*(elem-max_nnz_row);
     }
+    
     auto tmp = create(this->get_executor()->get_master(), data.num_rows,
                       data.num_cols, nnz, max_nnz_row, coo_nnz);
     size_type ind = 0, coo_ind = 0;
@@ -230,7 +231,7 @@ void Hyb<ValueType, IndexType>::read_from_mtx(const std::string &filename)
             if (val != zero<ValueType>()) {
                 tmp->get_values()[prefix+coo_ind] = val;
                 tmp->get_col_idxs()[prefix+coo_ind] = std::get<1>(data.nonzeros[ind]);
-                tmp->get_row_idxs()[coo_ind] = std::get<1>(data.nonzeros[ind]);
+                tmp->get_row_idxs()[coo_ind] = std::get<0>(data.nonzeros[ind]);
                 coo_ind++;
             }
         }

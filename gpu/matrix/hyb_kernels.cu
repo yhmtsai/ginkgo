@@ -159,24 +159,29 @@ __global__ __launch_bounds__(32) void coo_spmv_kernel(
     __shared__ IndexType temp_col[32];
 
     
-    // Assume 32 | nnz
-    const auto start = static_cast<size_type>(blockDim.x) * blockIdx.x * num_lines + threadIdx.x;
-    auto num = (nnz-start-1)/32+1;
+    const auto start = static_cast<size_type>(blockDim.x) * blockIdx.x * num_lines;
+    auto num = 0;
+    if (nnz > start) {
+        num = (nnz-start-1)/32+1;
+    }
     num = (num < num_lines) ? num : num_lines;
-    
+    int k = num;
+    // if (threadIdx.x == 0) {
+    //     printf("%d \n", k);
+    // }
     ValueType scan_val;
     IndexType ind;
     int is_scan = 0;
     temp_val[threadIdx.x] = zero<ValueType>();
     __syncthreads();
     for (int i = 0; i < num; i++) {
-        ind = start + i*32;
+        ind = start + threadIdx.x + i*32;
         temp_row[threadIdx.x] = (ind < nnz) ? row[ind] : row[nnz];
         temp_col[threadIdx.x] = (ind < nnz) ? col[ind] : col[nnz];
         temp_val[threadIdx.x] += (ind < nnz) ? val[ind]*b[temp_col[threadIdx.x]] : 0;
         // segmented scan
         is_scan = __any_sync(0xffffffff,
-                i == num_lines-1 || ind+32 >=nnz || temp_col[threadIdx.x] < col[ind+32]);
+                i == num_lines-1 || ind+32 >=nnz || temp_row[threadIdx.x] < row[ind+32]);
         if (is_scan) {
             scan_val = 0;
             if (threadIdx.x == 0 || temp_row[threadIdx.x] != temp_row[threadIdx.x-1]) {
@@ -207,19 +212,16 @@ void spmv(const matrix::Hyb<ValueType, IndexType> *a,
         as_cuda_type(a->get_const_values()), a->get_const_col_idxs(),
         as_cuda_type(b->get_const_values()),
         as_cuda_type(c->get_values()));
-    std::cout << "Step 1 \n";
     int w = ceildiv(a->get_const_coo_nnz(), 32);
     const auto start = a->get_num_rows()*a->get_const_max_nnz_row();
     const dim3 coo_block(32, 1, 1);
-    std::cout << "w = " << w << "\n";
     const dim3 coo_grid(w, 1, 1);
     coo_spmv_kernel<<<coo_grid, coo_block>>>(
-        a->get_num_rows(), a->get_const_coo_nnz(), 1,
+        a->get_num_rows(), a->get_const_coo_nnz(), 3,
         as_cuda_type(a->get_const_values()+start), a->get_const_col_idxs()+start,
         as_cuda_type(a->get_const_row_idxs()),
         as_cuda_type(b->get_const_values()),
         as_cuda_type(c->get_values()));
-    std::cout << "Step 2 \n";
 }
 
 

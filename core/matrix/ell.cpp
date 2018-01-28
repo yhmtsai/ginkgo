@@ -182,7 +182,7 @@ void Ell<ValueType, IndexType>::read_from_mtx(const std::string &filename)
     std::vector<index_type> nnz_row(data.num_rows, 0);
     for (const auto &elem : data.nonzeros) {
         nnz += (std::get<2>(elem) != zero<ValueType>());
-        nnz_row.at(std::get<0>(elem))++;
+        nnz_row.at(std::get<0>(elem)) += (std::get<2>(elem) != zero<ValueType>());
     }
     index_type max_nnz_row = 0;
     for (const auto &elem : nnz_row) {

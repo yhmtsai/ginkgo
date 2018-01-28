@@ -117,13 +117,9 @@ protected:
 TEST_F(Hyb, SimpleApplyIsEquivalentToRef) {
     set_up_apply_data();
     mtx->apply(y.get(), expected.get());
-    std::cout << "QQ\n";
     dmtx->apply(dy.get(), dresult.get());
-    std::cout << "QQ2\n";
     auto result = Vec::create(ref);
-    std::cout << "QQ3\n";
     result->copy_from(dresult.get());
-    std::cout << "QQ4\n";
     ASSERT_MTX_NEAR(result, expected, 1e-14);
     }
 
