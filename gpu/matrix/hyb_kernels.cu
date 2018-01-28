@@ -165,7 +165,6 @@ __global__ __launch_bounds__(32) void coo_spmv_kernel(
         num = (nnz-start-1)/32+1;
     }
     num = (num < num_lines) ? num : num_lines;
-    int k = num;
     // if (threadIdx.x == 0) {
     //     printf("%d \n", k);
     // }
@@ -212,16 +211,28 @@ void spmv(const matrix::Hyb<ValueType, IndexType> *a,
         as_cuda_type(a->get_const_values()), a->get_const_col_idxs(),
         as_cuda_type(b->get_const_values()),
         as_cuda_type(c->get_values()));
-    int w = ceildiv(a->get_const_coo_nnz(), 32);
+    int multiple = 8;
+    if (a->get_const_coo_nnz() >= 1000000) {
+        multiple = 128;
+    } else if (a->get_const_coo_nnz() >= 100000 ) {
+        multiple = 32;
+    }
+    int total_thread = multiple*2880;
+
+    int w = ceildiv(total_thread, 32);
     const auto start = a->get_num_rows()*a->get_const_max_nnz_row();
+    int num_lines = ceildiv(a->get_const_coo_nnz(), w*32);
+    // std::cout << "Num_lines: " << num_lines << "\n";
     const dim3 coo_block(32, 1, 1);
     const dim3 coo_grid(w, 1, 1);
-    coo_spmv_kernel<<<coo_grid, coo_block>>>(
-        a->get_num_rows(), a->get_const_coo_nnz(), 3,
-        as_cuda_type(a->get_const_values()+start), a->get_const_col_idxs()+start,
-        as_cuda_type(a->get_const_row_idxs()),
-        as_cuda_type(b->get_const_values()),
-        as_cuda_type(c->get_values()));
+    if (num_lines > 0) {
+        coo_spmv_kernel<<<coo_grid, coo_block>>>(
+            a->get_num_rows(), a->get_const_coo_nnz(), num_lines,
+            as_cuda_type(a->get_const_values()+start), a->get_const_col_idxs()+start,
+            as_cuda_type(a->get_const_row_idxs()),
+            as_cuda_type(b->get_const_values()),
+            as_cuda_type(c->get_values()));
+    }
 }
 
 

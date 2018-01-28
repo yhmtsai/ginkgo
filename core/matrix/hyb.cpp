@@ -189,6 +189,14 @@ void Hyb<ValueType, IndexType>::read_from_mtx(const std::string &filename)
         nnz_row.at(std::get<0>(elem)) += (std::get<2>(elem) != zero<ValueType>());
     }
     index_type max_nnz_row = data.num_cols/2;
+    // index_type max_nnz_row = 0;
+    index_type mnnzrow = 0;
+    for (const auto &elem : nnz_row) {
+        mnnzrow = std::max(mnnzrow, elem);
+    }
+    if (mnnzrow < max_nnz_row) {
+        max_nnz_row = mnnzrow;
+    }
     index_type coo_nnz = 0;
     // This is from Implementing Sparse Matrix-Vector Multiplication on
     // Throuput-Oriented Processors

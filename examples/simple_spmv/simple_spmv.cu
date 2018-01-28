@@ -66,14 +66,15 @@ env LD_LIBRARY_PATH=.:${LD_LIBRARY_PATH} ./simple_solver
 #include <include/ginkgo.hpp>
 #include <iostream>
 #include <string>
+#include <vector>
 
 int main(int argc, char *argv[])
 {
     // Some shortcuts
-    using vec = gko::matrix::Dense<>;
-    using csr_mtx = gko::matrix::Csr<>;
-    using hyb_mtx = gko::matrix::Hyb<>;
-
+    using vec = gko::matrix::Dense<double>;
+    using csr_mtx = gko::matrix::Csr<double, std::int32_t>;
+    using hyb_mtx = gko::matrix::Hyb<double, std::int32_t>;
+    
     // Figure out where to run the code
     std::shared_ptr<gko::Executor> exec;
     if (argc == 1 || std::string(argv[1]) == "reference") {
@@ -87,31 +88,68 @@ int main(int argc, char *argv[])
         std::cerr << "Usage: " << argv[0] << "[executor]" << std::endl;
         std::exit(-1);
     }
-
+    
     // Read data
     std::shared_ptr<csr_mtx> Acsr = csr_mtx::create(exec);
     std::shared_ptr<hyb_mtx> Ahyb = hyb_mtx::create(exec);
+    std::cout << "Read Matrix ... " << std::flush;
     Acsr->read_from_mtx("data/A.mtx");
     Ahyb->read_from_mtx("data/A.mtx");
+    std::cout << "done\n" << std::flush;
+    
+    int n = Acsr->get_num_rows();
+    int m = Acsr->get_num_cols();
+    
+    auto hb = vec::create(exec->get_master(), n, 1);
+    auto hx = vec::create(exec->get_master(), m, 1);
+    std::cout << "Construt b,x ... " << std::flush;
+    for (int i = 0; i < n; i++) {
+        hb->at(i, 0) = (rand()%100/100.0);
+    }
+    for (int i = 0; i < m; i++) {
+        hx->at(i, 0) = 0;
+    }
+    std::cout << "done\n" << std::flush;
     auto b = vec::create(exec);
-    b->read_from_mtx("data/b.mtx");
     auto xcsr = vec::create(exec);
-    xcsr->read_from_mtx("data/x0.mtx");
     auto xhyb = vec::create(exec);
-    xhyb->read_from_mtx("data/x0.mtx");
+    std::cout << "Move b,x ... " << std::flush;
+    b->copy_from(hb.get());
+    xcsr->copy_from(hx.get());
+    xhyb->copy_from(hx.get());
+    std::cout << "done\n" << std::flush;
+    std::cout << "NNZ: " << Acsr->get_num_stored_elements() << " " << Ahyb->get_num_stored_elements() << "\n";
+    // std::cout << "coo_nnz: " << Ahyb->get_const_coo_nnz() << "\n";
+    cudaEvent_t start, stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+    Acsr->apply(b.get(), xcsr.get());Acsr->apply(b.get(), xcsr.get());Acsr->apply(b.get(), xcsr.get());
+    cudaEventRecord(start);
     Acsr->apply(b.get(), xcsr.get());
-    Ahyb->apply(b.get(), xhyb.get());
+    cudaEventRecord(stop);
+    cudaEventSynchronize(stop);
 
+    float milliseconds = 0;
+    cudaEventElapsedTime(&milliseconds, start, stop);
+    std::cout << "CSR time: " << milliseconds/1000 << " GFLOPS: " << 2*Acsr->get_num_stored_elements()/milliseconds*1e-6 << "\n";
+    Ahyb->apply(b.get(), xhyb.get());Ahyb->apply(b.get(), xhyb.get());Ahyb->apply(b.get(), xhyb.get());
+    cudaEventRecord(start);
+    Ahyb->apply(b.get(), xhyb.get());
+    cudaEventRecord(stop);
+    cudaEventSynchronize(stop);
+    cudaEventElapsedTime(&milliseconds, start, stop);
+    std::cout << "HYB time: " << milliseconds/1000 << " GFLOPS: " << 2*Ahyb->get_num_stored_elements()/milliseconds*1e-6 << "\n";
     // Print result
     auto h_xcsr = vec::create(exec->get_master());
     h_xcsr->copy_from(xcsr.get());
     auto h_xhyb = vec::create(exec->get_master());
     h_xhyb->copy_from(xhyb.get());
-    std::cout << "x = [" << std::endl;
+    double res = 0, elem;
     for (int i = 0; i < h_xcsr->get_num_rows(); ++i) {
-        std::cout << "    " << h_xcsr->at(i, 0)  << "   " << h_xhyb->at(i, 0)<< std::endl;
+        elem = h_xcsr->at(i, 0) - h_xhyb->at(i, 0);
+        res += std::abs(elem*elem);
     }
-    std::cout << "];" << std::endl;
+    std::cout << "Res = " << std::sqrt(res) << std::endl;
 
     // Calculate residual
     // auto one = vec::create(exec, {1.0});
