@@ -156,43 +156,50 @@ __global__ __launch_bounds__(32) void coo_spmv_kernel(
     // ValueType *temp_val = reinterpret_cast<ValueType *>(smem);
     __shared__ ValueType temp_val[32];
     __shared__ IndexType temp_row[32];
-    __shared__ IndexType temp_col[32];
-
+    // __shared__ IndexType next_row[32];
     
     const auto start = static_cast<size_type>(blockDim.x) * blockIdx.x * num_lines;
-    auto num = 0;
-    if (nnz > start) {
-        num = (nnz-start-1)/32+1;
-    }
+    int num = (nnz > start) * (nnz-start)/32;
     num = (num < num_lines) ? num : num_lines;
-    // if (threadIdx.x == 0) {
-    //     printf("%d \n", k);
-    // }
     ValueType scan_val;
-    IndexType ind;
+    IndexType ind = start + threadIdx.x;
     int is_scan = 0;
     temp_val[threadIdx.x] = zero<ValueType>();
-    __syncthreads();
-    for (int i = 0; i < num; i++) {
-        ind = start + threadIdx.x + i*32;
-        temp_row[threadIdx.x] = (ind < nnz) ? row[ind] : row[nnz];
-        temp_col[threadIdx.x] = (ind < nnz) ? col[ind] : col[nnz];
-        temp_val[threadIdx.x] += (ind < nnz) ? val[ind]*b[temp_col[threadIdx.x]] : 0;
-        // segmented scan
-        is_scan = __any_sync(0xffffffff,
-                i == num_lines-1 || ind+32 >=nnz || temp_row[threadIdx.x] < row[ind+32]);
-        if (is_scan) {
-            scan_val = 0;
-            if (threadIdx.x == 0 || temp_row[threadIdx.x] != temp_row[threadIdx.x-1]) {
-                for (int i = threadIdx.x; temp_row[i] == temp_row[threadIdx.x] ; i++) {
-                    scan_val += temp_val[i];
-                    temp_val[i] = zero<ValueType>();
+    IndexType next_row = (num > 0) ? row[ind] : 0;
+    // next_row[threadIdx.x] = (num > 0) ? row[ind] : 0;
+    if (num > 0) {
+        for (int i = 0; i < num-1; i++) {
+            ind = start + threadIdx.x + i*32;
+            temp_row[threadIdx.x] = next_row;
+            temp_val[threadIdx.x] += val[ind]*b[col[ind]];
+            next_row = row[ind+32] ;
+            // segmented scan
+            is_scan = __any_sync(0xffffffff, temp_row[threadIdx.x] < next_row);
+            if (is_scan) {
+                scan_val = 0;
+                if (threadIdx.x == 0 || temp_row[threadIdx.x] != temp_row[threadIdx.x-1]) {
+                    for (int i = threadIdx.x; temp_row[i] == temp_row[threadIdx.x] ; i++) {
+                        scan_val += temp_val[i];
+                    }
+                    // c[temp_row[threadIdx.x]] += scan_val;
+                    atomicAdd(&(c[temp_row[threadIdx.x]]), scan_val);
                 }
-                // c[temp_row[threadIdx.x]] += scan_val;
-                
-                atomicAdd(&(c[temp_row[threadIdx.x]]), scan_val);
+                __syncthreads();
                 temp_val[threadIdx.x] = 0;
             }
+        }
+    }
+    if (num > 1) {
+        ind = start + threadIdx.x + (num-1)*32;
+        temp_row[threadIdx.x] = next_row;
+        temp_val[threadIdx.x] += val[ind]*b[col[ind]];
+        scan_val = 0;
+        if (threadIdx.x == 0 || temp_row[threadIdx.x] != temp_row[threadIdx.x-1]) {
+            for (int i = threadIdx.x; temp_row[i] == temp_row[threadIdx.x] ; i++) {
+                scan_val += temp_val[i];
+            }
+            // c[temp_row[threadIdx.x]] += scan_val;
+            atomicAdd(&(c[temp_row[threadIdx.x]]), scan_val);
         }
     }
 
@@ -222,7 +229,7 @@ void spmv(const matrix::Hyb<ValueType, IndexType> *a,
     int w = ceildiv(total_thread, 32);
     const auto start = a->get_num_rows()*a->get_const_max_nnz_row();
     int num_lines = ceildiv(a->get_const_coo_nnz(), w*32);
-    // std::cout << "Num_lines: " << num_lines << "\n";
+    std::cout << "Num_lines: " << num_lines << "\n";
     const dim3 coo_block(32, 1, 1);
     const dim3 coo_grid(w, 1, 1);
     if (num_lines > 0) {
