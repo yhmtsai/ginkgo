@@ -67,7 +67,7 @@ env LD_LIBRARY_PATH=.:${LD_LIBRARY_PATH} ./simple_solver
 #include <iostream>
 #include <string>
 #include <vector>
-
+#include <string>
 int main(int argc, char *argv[])
 {
     // Some shortcuts
@@ -75,25 +75,28 @@ int main(int argc, char *argv[])
     using csr_mtx = gko::matrix::Csr<float, std::int32_t>;
     using hyb_mtx = gko::matrix::Hyb<float, std::int32_t>;
     // Figure out where to run the code
-    std::shared_ptr<gko::Executor> exec;
-    if (argc == 1 || std::string(argv[1]) == "reference") {
-        exec = gko::ReferenceExecutor::create();
-    } else if (argc == 2 && std::string(argv[1]) == "cpu") {
-        exec = gko::CpuExecutor::create();
-    } else if (argc == 2 && std::string(argv[1]) == "gpu" &&
-               gko::GpuExecutor::get_num_devices() > 0) {
-        exec = gko::GpuExecutor::create(0, gko::CpuExecutor::create());
-    } else {
-        std::cerr << "Usage: " << argv[0] << "[executor]" << std::endl;
-        std::exit(-1);
-    }
     
+    std::string Amtx = "data/A.mtx";
+    int deviceid = 0;
+
+    if (argc > 1) {
+        deviceid = atoi(argv[1]);
+    }
+    if (argc == 3) {
+        Amtx = argv[2];
+    } else if (argc > 3) {
+        printf("Usage: ./simple_spmv deviceid path/to/A\n");
+        exit(1);
+    }
+    std::shared_ptr<gko::Executor> exec =
+        gko::GpuExecutor::create(deviceid, gko::CpuExecutor::create());
+    std::cout << "device id: " << deviceid << " A matrix: " << Amtx << "\n";
     // Read data
     std::shared_ptr<csr_mtx> Acsr = csr_mtx::create(exec);
     std::shared_ptr<hyb_mtx> Ahyb = hyb_mtx::create(exec);
     std::cout << "Read Matrix ... " << std::flush;
-    Acsr->read_from_mtx("data/A.mtx");
-    Ahyb->read_from_mtx("data/A.mtx");
+    Acsr->read_from_mtx(Amtx);
+    Ahyb->read_from_mtx(Amtx);
     std::cout << "done\n" << std::flush;
     
     int n = Acsr->get_num_rows();

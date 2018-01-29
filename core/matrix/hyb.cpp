@@ -42,6 +42,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "core/matrix/dense.hpp"
 #include <vector>
 #include <iostream>
+#include <algorithm>
 
 namespace gko {
 namespace matrix {
@@ -189,7 +190,8 @@ void Hyb<ValueType, IndexType>::read_from_mtx(const std::string &filename)
         nnz_row.at(std::get<0>(elem)) += (std::get<2>(elem) != zero<ValueType>());
     }
     // index_type max_nnz_row = data.num_cols/2;
-    index_type max_nnz_row = 0;
+    std::sort(nnz_row.begin(), nnz_row.end());
+    index_type max_nnz_row = nnz_row.at(data.num_rows*8/10);
     index_type mnnzrow = 0;
     for (const auto &elem : nnz_row) {
         mnnzrow = std::max(mnnzrow, elem);
@@ -197,6 +199,7 @@ void Hyb<ValueType, IndexType>::read_from_mtx(const std::string &filename)
     if (mnnzrow < max_nnz_row) {
         max_nnz_row = mnnzrow;
     }
+    std::cout << "Threshold: " << max_nnz_row << " Max: " << nnz_row.at(data.num_rows-1) << "\n";
     index_type coo_nnz = 0;
     // This is from Implementing Sparse Matrix-Vector Multiplication on
     // Throuput-Oriented Processors
