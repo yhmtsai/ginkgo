@@ -39,6 +39,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "gpu/base/cusparse_bindings.hpp"
 #include "gpu/base/types.hpp"
 #include <iostream>
+#include <cstdio>
 
 #if defined(__CUDA_ARCH__) && __CUDA_ARCH__ < 600
 __device__ double atomicAdd(double* address, double val)
@@ -110,6 +111,7 @@ __device__ thrust::complex<double>
     return *address;
 }
 
+
 // __device__ int wrap_any_sync(unsigned mask, int predicate) {
 //     return __any_sync(mask, predicate);
 // }
@@ -154,54 +156,140 @@ __global__ __launch_bounds__(32) void coo_spmv_kernel(
     // need to check whether it is correct
     // extern __shared__ __align__(sizeof(ValueType)) unsigned char smem[];
     // ValueType *temp_val = reinterpret_cast<ValueType *>(smem);
-    __shared__ ValueType temp_val[32];
-    __shared__ IndexType temp_row[32];
-    // __shared__ IndexType next_row[32];
-    
+    ValueType temp_val = zero<ValueType>();
+    IndexType temp_row;
+    __shared__ IndexType rows[32];
+    __shared__ ValueType vals[32];
+    __shared__ bool flags[32];
     const auto start = static_cast<size_type>(blockDim.x) * blockIdx.x * num_lines;
     int num = (nnz > start) * (nnz-start)/32;
     num = (num < num_lines) ? num : num_lines;
-    ValueType scan_val;
+    ValueType value;
     IndexType ind = start + threadIdx.x;
     int is_scan = 0;
-    temp_val[threadIdx.x] = zero<ValueType>();
+    bool flag, ori_flag, flag_o, tmpflag;
+    IndexType tr;
+    const int N = 32, logn = 5;
+    ValueType tmp = 0, tmp2 = 0;
+    
     IndexType next_row = (num > 0) ? row[ind] : 0;
-    // next_row[threadIdx.x] = (num > 0) ? row[ind] : 0;
     if (num > 0) {
-        for (int i = 0; i < num-1; i++) {
+        for (int i = 0; i < num; i++) {
             ind = start + threadIdx.x + i*32;
-            temp_row[threadIdx.x] = next_row;
-            temp_val[threadIdx.x] += val[ind]*b[col[ind]];
-            next_row = row[ind+32] ;
+            temp_row = next_row;
+            temp_val += val[ind]*b[col[ind]];
+            next_row = (i != num-1) ?row[ind+32] : 0;
             // segmented scan
-            is_scan = __any_sync(0xffffffff, temp_row[threadIdx.x] < next_row);
+            is_scan = __any_sync(0xffffffff, i == num-1 || temp_row < next_row);
+            
+            // __syncthreads();
+            // if (threadIdx.x == 0) {
+            //     for (int k = 0; k < 32; k++) {
+            //         printf("%d ", row[k])
+            //     }
+            // }
             if (is_scan) {
-                scan_val = 0;
-                if (threadIdx.x == 0 || temp_row[threadIdx.x] != temp_row[threadIdx.x-1]) {
-                    for (int i = threadIdx.x; temp_row[i] == temp_row[threadIdx.x] ; i++) {
-                        scan_val += temp_val[i];
+                tr = __shfl_up_sync(0xffffffff, temp_row, 1);
+                flag = (threadIdx.x == 0) || (temp_row != tr);
+                ori_flag = flag;
+                value = temp_val;
+                for (int d = 0; d < logn; d++) {
+                    tmp = __shfl_up_sync(0xffffffff, value, 1<<d);
+                    tmpflag = __shfl_up_sync(0xffffffff, flag, 1<<d);
+                    if ((threadIdx.x+1) % (1<<(d+1)) == 0) {
+                        if (flag == 0) {
+                            value += tmp;
+                        }
+                        flag |= tmpflag;
                     }
-                    // c[temp_row[threadIdx.x]] += scan_val;
-                    atomicAdd(&(c[temp_row[threadIdx.x]]), scan_val);
                 }
-                __syncthreads();
-                temp_val[threadIdx.x] = 0;
+                if (threadIdx.x == N-1) {
+                    value = 0;
+                    flag = false;
+                }
+                for (int d = logn-1; d>=0; d--) {
+                    tmp = __shfl_up_sync(0xffffffff, value, 1<<d);
+                    tmpflag = __shfl_up_sync(0xffffffff, flag, 1<<d);
+                    flag_o = __shfl_up_sync(0xffffffff, ori_flag, (1<<d)-1);
+                    tmp2 = __shfl_down_sync(0xffffffff, value, 1<<d);
+                    if ( (N+1-threadIdx.x) > (1<<d) && (threadIdx.x+1+(1<<d)) % (1<<(d+1)) == 0 ) {
+                        value = tmp2;
+                    }
+                    if ((threadIdx.x+1) % (1<<(d+1)) == 0) {
+                        if (flag_o == true) {
+                            value = 0;
+                        }
+                        else if (tmpflag == true) {
+                            value = tmp;
+                        }
+                        else {
+                            value += tmp;
+                        }
+                    }
+                    if ((N+1-threadIdx.x) > (1<<d) && (threadIdx.x+1+(1<<d)) % (1<<(d+1)) == 0) {
+                        flag = false;
+                    }
+                }
+                tr = __shfl_down_sync(0xffffffff, temp_row, 1);
+                if ((temp_row != tr) || (threadIdx.x == 31)) {
+                    // printf("%d Write %d\n", threadIdx.x, temp_row);
+                    atomicAdd(&(c[temp_row]), value + temp_val);
+                }
+                temp_val = 0;
             }
         }
     }
-    if (num > 1) {
-        ind = start + threadIdx.x + (num-1)*32;
-        temp_row[threadIdx.x] = next_row;
-        temp_val[threadIdx.x] += val[ind]*b[col[ind]];
-        scan_val = 0;
-        if (threadIdx.x == 0 || temp_row[threadIdx.x] != temp_row[threadIdx.x-1]) {
-            for (int i = threadIdx.x; temp_row[i] == temp_row[threadIdx.x] ; i++) {
-                scan_val += temp_val[i];
-            }
-            // c[temp_row[threadIdx.x]] += scan_val;
-            atomicAdd(&(c[temp_row[threadIdx.x]]), scan_val);
-        }
-    }
+    // if (num > 0) {
+    //     ind = start + threadIdx.x + (num-1)*32;
+    //     temp_row = next_row;
+    //     temp_val += val[ind]*b[col[ind]];
+    //     value = temp_val;
+    //     tr = __shfl_up_sync(0xffffffff, temp_row, 1);
+    //     flag = (threadIdx.x == 0) || (temp_row != tr);
+    //     ori_flag = flag;
+    //     for (int d = 0; d < logn; d++) {
+    //         tmp = __shfl_up_sync(0xffffffff, value, 1<<d);
+    //         tmpflag = __shfl_up_sync(0xffffffff, flag, 1<<d);
+    //         if ((threadIdx.x+1) % (1<<(d+1)) == 0) {
+    //             if (flag == 0) {
+    //                 value += tmp;
+    //             }
+    //             flag |= tmpflag;
+    //         }
+    //     }
+    //     if (threadIdx.x == N-1) {
+    //         value = 0;
+    //         flag = false;
+    //     }
+    //     for (int d = logn-1; d>=0; d--) {
+    //         tmp = __shfl_up_sync(0xffffffff, value, 1<<d);
+    //         tmpflag = __shfl_up_sync(0xffffffff, flag, 1<<d);
+    //         flag_o = __shfl_up_sync(0xffffffff, ori_flag, (1<<d)-1);
+    //         tmp2 = __shfl_down_sync(0xffffffff, value, 1<<d);
+    //         if ( (N+1-threadIdx.x) > (1<<d) && (threadIdx.x+1+(1<<d)) % (1<<(d+1)) == 0 ) {
+    //             // printf("t = %d, tmp2 = %lf\n", threadIdx.x, tmp2);
+    //             value = tmp2;
+    //         }
+    //         if ((threadIdx.x+1) % (1<<(d+1)) == 0) {
+    //             if (flag_o == true) {
+    //                 value = 0;
+    //             }
+    //             else if (tmpflag == true) {
+    //                 value = tmp;
+    //             }
+    //             else {
+    //                 value += tmp;
+    //             }
+    //         }
+    //         if ((N+1-threadIdx.x) > (1<<d) && (threadIdx.x+1+(1<<d)) % (1<<(d+1)) == 0) {
+    //             flag = false;
+    //         }
+    //     }
+    //     tr = __shfl_down_sync(0xffffffff, temp_row, 1);
+    //     if ((temp_row != tr) || (threadIdx.x == 31)) {
+    //         atomicAdd(&(c[temp_row]), value + temp_val);
+    //     }
+    // }
 
 }
 

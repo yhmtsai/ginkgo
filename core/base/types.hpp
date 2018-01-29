@@ -110,9 +110,9 @@ using default_precision = double;
  */
 #define GKO_INSTANTIATE_FOR_EACH_VALUE_TYPE(_macro) \
     template _macro(float);                         \
-    template _macro(double);                        \
-    template _macro(std::complex<float>);           \
-    template _macro(std::complex<double>)
+    template _macro(double)
+    // template _macro(std::complex<float>);           \
+    // template _macro(std::complex<double>)
 
 
 /**
@@ -126,12 +126,12 @@ using default_precision = double;
 #define GKO_INSTANTIATE_FOR_EACH_VALUE_AND_INDEX_TYPE(_macro) \
     template _macro(float, int32);                            \
     template _macro(double, int32);                           \
-    template _macro(std::complex<float>, int32);              \
-    template _macro(std::complex<double>, int32);             \
     template _macro(float, int64);                            \
-    template _macro(double, int64);                           \
-    template _macro(std::complex<float>, int64);              \
-    template _macro(std::complex<double>, int64)
+    template _macro(double, int64)
+    // template _macro(std::complex<float>, int32);              \
+    // template _macro(std::complex<double>, int32);             \
+    // template _macro(std::complex<float>, int64);              \
+    // template _macro(std::complex<double>, int64)
 
 }  // namespace gko
 

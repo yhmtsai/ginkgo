@@ -71,10 +71,9 @@ env LD_LIBRARY_PATH=.:${LD_LIBRARY_PATH} ./simple_solver
 int main(int argc, char *argv[])
 {
     // Some shortcuts
-    using vec = gko::matrix::Dense<double>;
-    using csr_mtx = gko::matrix::Csr<double, std::int32_t>;
-    using hyb_mtx = gko::matrix::Hyb<double, std::int32_t>;
-    
+    using vec = gko::matrix::Dense<float>;
+    using csr_mtx = gko::matrix::Csr<float, std::int32_t>;
+    using hyb_mtx = gko::matrix::Hyb<float, std::int32_t>;
     // Figure out where to run the code
     std::shared_ptr<gko::Executor> exec;
     if (argc == 1 || std::string(argv[1]) == "reference") {
@@ -104,7 +103,8 @@ int main(int argc, char *argv[])
     auto hx = vec::create(exec->get_master(), m, 1);
     std::cout << "Construt b,x ... " << std::flush;
     for (int i = 0; i < n; i++) {
-        hb->at(i, 0) = (rand()%100/100.0);
+        // hb->at(i, 0) = (rand()%100/100.0);
+        hb->at(i, 0) = 1;
     }
     for (int i = 0; i < m; i++) {
         hx->at(i, 0) = 0;
@@ -144,12 +144,15 @@ int main(int argc, char *argv[])
     h_xcsr->copy_from(xcsr.get());
     auto h_xhyb = vec::create(exec->get_master());
     h_xhyb->copy_from(xhyb.get());
-    double res = 0, elem;
+    double res = 0, elem, temp = 0;
+    // std::cout << h_xcsr->get_num_rows() << "\n";
     for (int i = 0; i < h_xcsr->get_num_rows(); ++i) {
         elem = h_xcsr->at(i, 0) - h_xhyb->at(i, 0);
-        res += std::abs(elem*elem);
+        temp += h_xcsr->at(i, 0) * h_xcsr->at(i, 0);
+        res += elem*elem;
+        // std::cout << h_xcsr->at(i, 0) << "   " <<h_xhyb->at(i, 0) << "\n";
     }
-    std::cout << "Res = " << std::sqrt(res) << std::endl;
+    std::cout << "Res = " << std::sqrt(res) << " " << std::sqrt(res)/std::sqrt(temp) << std::endl;
 
     // Calculate residual
     // auto one = vec::create(exec, {1.0});
