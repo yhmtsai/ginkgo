@@ -125,7 +125,13 @@ TEST_F(Hyb, SimpleApplyIsEquivalentToRef) {
 
 
 TEST_F(Hyb, AdvancedApplyIsEquivalentToRef) {
-        NOT_IMPLEMENTED;
+    set_up_apply_data();
+    mtx->apply(alpha.get(), y.get(), beta.get(), expected.get());
+    dmtx->apply(dalpha.get(), dy.get(), dbeta.get(), dresult.get());
+
+    auto result = Vec::create(ref);
+    result->copy_from(dresult.get());
+    ASSERT_MTX_NEAR(result, expected, 1e-14);
     }
 
 

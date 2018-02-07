@@ -100,26 +100,33 @@ void advanced_spmv(const matrix::Dense<ValueType> *alpha,
                    const matrix::Dense<ValueType> *beta,
                    matrix::Dense<ValueType> *c)
 {
-	NOT_IMPLEMENTED;
-    // auto row_ptrs = a->get_const_row_ptrs();
-    // auto col_idxs = a->get_const_col_idxs();
-    // auto vals = a->get_const_values();
-    // auto valpha = alpha->at(0, 0);
-    // auto vbeta = beta->at(0, 0);
-
-    // for (size_type row = 0; row < a->get_num_rows(); ++row) {
-    //     for (size_type j = 0; j < c->get_num_cols(); ++j) {
-    //         c->at(row, j) *= vbeta;
-    //     }
-    //     for (size_type k = row_ptrs[row];
-    //          k < static_cast<size_type>(row_ptrs[row + 1]); ++k) {
-    //         auto val = vals[k];
-    //         auto col = col_idxs[k];
-    //         for (size_type j = 0; j < c->get_num_cols(); ++j) {
-    //             c->at(row, j) += valpha * val * b->at(col, j);
-    //         }
-    //     }
-    // }
+    auto col_idxs = a->get_const_col_idxs();
+    auto vals = a->get_const_values();
+    auto max_nnz_row = a->get_const_max_nnz_row();
+    auto arows = a->get_num_rows();
+    auto coo_vals = vals+arows*max_nnz_row;
+    auto coo_col = col_idxs+arows*max_nnz_row;
+    auto coo_row = a->get_const_row_idxs();
+    auto coo_nnz = a->get_const_coo_nnz();
+    auto beta_val = beta->get_const_values();
+    auto alpha_val = alpha->get_const_values();
+    for (size_type row = 0; row < arows; row++) {
+        for (size_type j = 0; j < c->get_num_cols(); j++) {
+            c->at(row, j) *= beta_val[0];
+        }
+        for (size_type i = 0; i < max_nnz_row; i++) {
+            auto val = vals[row + i*arows];
+            auto col = col_idxs[row + i*arows];
+            for (size_type j = 0; j < c->get_num_cols(); j++) {
+                c->at(row, j) += alpha_val[0]*val*b->at(col, j);
+            }
+        }
+    }
+    for (size_type i = 0; i < coo_nnz; i++) {
+        for (size_type j = 0; j < c->get_num_cols(); j++) {
+                c->at(coo_row[i], j) += alpha_val[0]*coo_vals[i]*b->at(coo_col[i], j);
+        }
+    }
 }
 
 GKO_INSTANTIATE_FOR_EACH_VALUE_AND_INDEX_TYPE(
