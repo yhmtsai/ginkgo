@@ -181,7 +181,6 @@ __global__ __launch_bounds__(32) void coo_spmv_kernel(
     ValueType *__restrict__ c)
 {
     ValueType temp_val = zero<ValueType>();
-    
     IndexType temp_row;
     const auto start = static_cast<size_type>(blockDim.x) * blockIdx.x * num_lines;
     int num = (nnz > start) * (nnz-start)/32;
@@ -284,7 +283,6 @@ __global__ __launch_bounds__(32) void coo_spmv_kernel2(
             temp_val = 0;
         }
     }
-
 }
 
 
@@ -329,13 +327,191 @@ void spmv(const matrix::Hyb<ValueType, IndexType> *a,
 
 GKO_INSTANTIATE_FOR_EACH_VALUE_AND_INDEX_TYPE(GKO_DECLARE_HYB_SPMV_KERNEL);
 
+
+template <typename ValueType, typename IndexType>
+__global__ __launch_bounds__(default_block_size) void ell_advanced_spmv_kernel(
+    size_type num_rows, IndexType max_nnz_row,
+    const ValueType *__restrict__ alpha,
+    const ValueType *__restrict__ val, const IndexType *__restrict__ col,
+    const ValueType *__restrict__ b,
+    const ValueType *__restrict__ beta,
+    ValueType *__restrict__ c)
+{
+    const auto tidx =
+        static_cast<size_type>(blockDim.x) * blockIdx.x + threadIdx.x;
+
+    ValueType temp = 0;
+    IndexType ind = 0;
+    if (tidx < num_rows) {
+        for (IndexType i = 0; i < max_nnz_row; i++) {
+            ind = tidx + i*num_rows;
+            temp += val[ind]*b[col[ind]];
+        }
+        c[tidx] = alpha[0]*temp + beta[0] * c[tidx];
+    }
+}
+
+template <typename ValueType, typename IndexType>
+__global__ __launch_bounds__(32) void coo_advanced_spmv_kernel(
+    const size_type num_rows, const IndexType nnz, const size_type num_lines,
+    const ValueType *__restrict__ alpha,
+    const ValueType *__restrict__ val, const IndexType *__restrict__ col,
+    const IndexType *__restrict__ row,
+    const ValueType *__restrict__ b,
+    ValueType *__restrict__ c)
+{
+    ValueType temp_val = zero<ValueType>();
+    IndexType temp_row;
+    const auto start = static_cast<size_type>(blockDim.x) * blockIdx.x * num_lines;
+    const auto alpha_val = alpha[0];
+    int num = (nnz > start) * (nnz-start)/32;
+    num = (num < num_lines) ? num : num_lines;
+    ValueType value;
+    IndexType ind = start + threadIdx.x;
+    int is_scan = 0;
+    bool flag, ori_flag, flag_o, tmpflag;
+    IndexType tr;
+    const int N = 32, logn = 5;
+    ValueType tmp = 0, tmp2 = 0;
+    IndexType next_row = (num > 0) ? row[ind] : 0;
+    for (int i = 0; i < num; i++) {
+        ind = start + threadIdx.x + i*32;
+        temp_row = next_row;
+        temp_val += val[ind]*b[col[ind]];
+        next_row = (i != num-1) ? row[ind+32] : 0;
+        // segmented scan
+        is_scan = __any_sync(0xffffffff, i == num-1 || temp_row < next_row);
+        if (is_scan) {
+            tr = __shfl_up_sync(0xffffffff, temp_row, 1);
+            flag = (threadIdx.x == 0) || (temp_row != tr);
+            ori_flag = flag;
+            value = temp_val;
+            for (int d = 0; d < logn; d++) {
+                tmp = __shfl_up_sync(0xffffffff, value, 1 << d);
+                tmpflag = __shfl_up_sync(0xffffffff, flag, 1 << d);
+                if ((threadIdx.x+1) % (1 << (d+1)) == 0) {
+                    value += (flag == 0) * tmp;
+                    flag |= tmpflag;
+                }
+            }
+            value = (threadIdx.x != N-1) * value;
+            flag = (threadIdx.x != N-1) * flag;
+            for (int d = logn-1; d >= 0; d--) {
+                tmp = __shfl_up_sync(0xffffffff, value, 1 << d);
+                tmpflag = __shfl_up_sync(0xffffffff, flag, 1 << d);
+                flag_o = __shfl_up_sync(0xffffffff, ori_flag, (1 << d)-1);
+                tmp2 = __shfl_down_sync(0xffffffff, value, 1 << d);
+                if ((threadIdx.x+1) % (1 << (d+1)) == 0) {
+                    value = (flag_o == false)*
+                        ((tmpflag == true) ? tmp : tmp+value);
+                }
+                if (((N+1-threadIdx.x) > (1 << d)) &&
+                    (((threadIdx.x+1+(1 << d)) % (1 << (d+1))) == 0)) {
+                    value = tmp2;
+                    flag = false;
+                }
+            }
+            tr = __shfl_down_sync(0xffffffff, temp_row, 1);
+            if ((temp_row != tr) || (threadIdx.x == 31)) {
+                    atomicAdd(&(c[temp_row]), alpha_val*(value + temp_val));
+            }
+            temp_val = 0;
+        }
+    }
+
+}
+
+template <typename ValueType, typename IndexType>
+__global__ __launch_bounds__(32) void coo_advanced_spmv_kernel2(
+    const size_type num_rows, const IndexType nnz, const size_type num_lines,
+    const ValueType *__restrict__ alpha,
+    const ValueType *__restrict__ val, const IndexType *__restrict__ col,
+    const IndexType *__restrict__ row,
+    const ValueType *__restrict__ b,
+    ValueType *__restrict__ c)
+{
+    ValueType temp_val = zero<ValueType>();
+    const auto alpha_val = alpha[0];
+    IndexType temp_row;
+    const auto start = static_cast<size_type>(blockDim.x) * blockIdx.x * num_lines;
+    int num = (nnz > start) * (nnz-start)/32;
+    num = (num < num_lines) ? num : num_lines;
+    ValueType add_val;
+    IndexType ind = start + threadIdx.x;
+    int is_scan = 0;
+    IndexType add_row;
+    const int logn = 5;
+    IndexType next_row = (num > 0) ? row[ind] : 0;
+    for (int i = 0; i < num; i++) {
+        ind = start + threadIdx.x + i*32;
+        temp_row = next_row;
+        temp_val += val[ind]*b[col[ind]];
+        next_row = (i != num-1) ? row[ind+32] : 0;
+        // segmented scan
+        is_scan = __any_sync(0xffffffff, i == num-1 || temp_row < next_row);
+        if (is_scan) {
+
+            for (int i = 0; i < logn; i++) {
+                add_row = __shfl_up_sync(0xffffffff, temp_row, 1 << i);
+                add_val = __shfl_up_sync(0xffffffff, temp_val, 1 << i);
+                if (threadIdx.x >= (1 << i) && add_row == temp_row) {
+                    temp_val += add_val;
+                }
+            }
+            add_row = __shfl_down_sync(0xffffffff, temp_row, 1);
+            if ((temp_row != add_row) || (threadIdx.x == 31)) {
+                    atomicAdd(&(c[temp_row]), alpha_val*temp_val);
+            }
+            temp_val = 0;
+        }
+    }
+}
+
+
 template <typename ValueType, typename IndexType>
 void advanced_spmv(const matrix::Dense<ValueType> *alpha,
                    const matrix::Hyb<ValueType, IndexType> *a,
                    const matrix::Dense<ValueType> *b,
                    const matrix::Dense<ValueType> *beta,
-                   matrix::Dense<ValueType> *c)
-NOT_IMPLEMENTED;
+                   matrix::Dense<ValueType> *c) {
+        
+    const dim3 block_size(default_block_size, 1, 1);
+    const dim3 grid_size(
+        ceildiv(a->get_num_rows(), block_size.x), 1, 1);
+    
+    ell_advanced_spmv_kernel<<<grid_size, block_size, 0, 0>>>(
+        a->get_num_rows(), a->get_const_max_nnz_row(),
+        as_cuda_type(alpha->get_const_values()),
+        as_cuda_type(a->get_const_values()), a->get_const_col_idxs(),
+        as_cuda_type(b->get_const_values()),
+        as_cuda_type(beta->get_const_values()),
+        as_cuda_type(c->get_values()));
+    int multiple = 8;
+    if (a->get_const_coo_nnz() >= 1000000) {
+        multiple = 128;
+    } else if (a->get_const_coo_nnz() >= 100000 ) {
+        multiple = 32;
+    }
+    int total_thread = multiple*2880;
+    // int total_thread = multiple*3584;
+
+    int w = ceildiv(total_thread, 32);
+    const auto start = a->get_num_rows()*a->get_const_max_nnz_row();
+    int num_lines = ceildiv(a->get_const_coo_nnz(), w*32);
+    // std::cout << "Num_lines: " << num_lines << "\n";
+    const dim3 coo_block(32, 1, 1);
+    const dim3 coo_grid(w, 1, 1);
+    if (num_lines > 0) {
+        coo_advanced_spmv_kernel2<<<coo_grid, coo_block>>>(
+            a->get_num_rows(), a->get_const_coo_nnz(), num_lines,
+            as_cuda_type(alpha->get_const_values()),
+            as_cuda_type(a->get_const_values()+start),
+            a->get_const_col_idxs()+start,
+            as_cuda_type(a->get_const_row_idxs()),
+            as_cuda_type(b->get_const_values()),
+            as_cuda_type(c->get_values()));
+    }
+}
 
 GKO_INSTANTIATE_FOR_EACH_VALUE_AND_INDEX_TYPE(
     GKO_DECLARE_HYB_ADVANCED_SPMV_KERNEL);
