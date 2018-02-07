@@ -111,10 +111,37 @@ __device__ thrust::complex<double>
     return *address;
 }
 
+__device__ thrust::complex<double> __shfl_up_sync(
+    unsigned mask, thrust::complex<double> var, unsigned int delta) {
+    thrust::complex<double> answer;
+    answer.real(__shfl_up_sync(mask, var.real(), delta));
+    answer.imag(__shfl_up_sync(mask, var.imag(), delta));
+    return answer;
+}
 
-// __device__ int wrap_any_sync(unsigned mask, int predicate) {
-//     return __any_sync(mask, predicate);
-// }
+__device__ thrust::complex<float> __shfl_up_sync(
+    unsigned mask, thrust::complex<float> var, unsigned int delta) {
+    thrust::complex<float> answer;
+    answer.real(__shfl_up_sync(mask, var.real(), delta));
+    answer.imag(__shfl_up_sync(mask, var.imag(), delta));
+    return answer;
+}
+
+__device__ thrust::complex<double> __shfl_down_sync(
+    unsigned mask, thrust::complex<double> var, unsigned int delta) {
+    thrust::complex<double> answer;
+    answer.real(__shfl_down_sync(mask, var.real(), delta));
+    answer.imag(__shfl_down_sync(mask, var.imag(), delta));
+    return answer;
+}
+
+__device__ thrust::complex<float> __shfl_down_sync(
+    unsigned mask, thrust::complex<float> var, unsigned int delta) {
+    thrust::complex<float> answer;
+    answer.real(__shfl_down_sync(mask, var.real(), delta));
+    answer.imag(__shfl_down_sync(mask, var.imag(), delta));
+    return answer;
+}
 
 namespace gko {
 namespace kernels {
@@ -232,7 +259,7 @@ __global__ __launch_bounds__(32) void coo_spmv_kernel2(
     IndexType ind = start + threadIdx.x;
     int is_scan = 0;
     IndexType add_row;
-    const int N = 32, logn = 5;
+    const int logn = 5;
     IndexType next_row = (num > 0) ? row[ind] : 0;
     for (int i = 0; i < num; i++) {
         ind = start + threadIdx.x + i*32;

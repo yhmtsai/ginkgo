@@ -69,7 +69,7 @@ env LD_LIBRARY_PATH=.:${LD_LIBRARY_PATH} ./simple_solver
 #include <vector>
 #include <string>
 
-#define DEBUG
+// #define DEBUG
 int main(int argc, char *argv[])
 {
     // Some shortcuts
