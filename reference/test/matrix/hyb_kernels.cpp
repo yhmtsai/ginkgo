@@ -54,25 +54,27 @@ protected:
 
     Hyb()
         : exec(gko::ReferenceExecutor::create()),
-          mtx(Mtx::create(exec, 2, 3, 4, 1, 2))
+          mtx(Mtx::create(exec, 2, 3, 4, 3, 0))
     {
         Mtx::value_type *v = mtx->get_values();
         Mtx::index_type *c = mtx->get_col_idxs();
         Mtx::index_type *r = mtx->get_row_idxs();
         Mtx::index_type n = mtx->get_max_nnz_row();
         Mtx::index_type coo = mtx->get_coo_nnz();
-        n = 1;
-        coo = 2;
+        n = 3;
+        coo = 0;
         c[0] = 0;
         c[1] = 1;
         c[2] = 1;
-        c[3] = 2;
-        r[0] = 0;
-        r[1] = 0;
+        c[3] = 1;
+        c[4] = 2;
+        c[5] = 1;
         v[0] = 1.0;
         v[1] = 5.0;
         v[2] = 3.0;
-        v[3] = 2.0;
+        v[3] = 0.0;
+        v[4] = 2.0;
+        v[5] = 0.0;
     }
 
     std::shared_ptr<const gko::Executor> exec;

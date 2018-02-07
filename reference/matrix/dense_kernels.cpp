@@ -39,6 +39,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "core/matrix/ell.hpp"
 #include "core/matrix/hyb.hpp"
 #include <iostream>
+#include <algorithm>
 
 namespace gko {
 namespace kernels {
@@ -249,6 +250,7 @@ void convert_to_hyb(matrix::Hyb<ValueType, IndexType> *result,
     auto num_nonzeros = result->get_num_stored_elements();
 
     auto max_nnz_row = result->get_max_nnz_row();
+    auto coo_nnz = result->get_coo_nnz();
     auto col_idxs = result->get_col_idxs();
     auto values = result->get_values();
     auto coo_col = col_idxs + max_nnz_row * num_rows;
@@ -281,6 +283,11 @@ void convert_to_hyb(matrix::Hyb<ValueType, IndexType> *result,
             }
         }
     }
+    for(coo_ind; coo_ind < coo_nnz; coo_ind++) {
+        coo_val[coo_ind] = 0;
+        coo_col[coo_ind] = coo_col[coo_ind-1];
+        coo_row[coo_ind] = coo_row[coo_ind-1];
+    } 
 }
 
 GKO_INSTANTIATE_FOR_EACH_VALUE_AND_INDEX_TYPE(
@@ -341,28 +348,28 @@ void get_hyb_parameter(const matrix::Dense<ValueType> *source, size_type *result
     auto num_rows = source->get_num_rows();
     auto num_cols = source->get_num_cols();
     auto temp = 0;
-    size_type *row_num = new size_type[num_rows];
-    auto max_nnz_row = 0;
-    auto coo_nnz = 0;
+    std::vector<size_type> nnz_row(num_rows, 0);
     for (size_type row = 0; row < num_rows; ++row) {
         temp = 0;
         for (size_type col = 0; col < num_cols; ++col) {
             temp += (source->at(row, col) != zero<ValueType>());
         }
-        row_num[row] = temp;
-        max_nnz_row = (max_nnz_row < temp) ? temp : max_nnz_row;
+        nnz_row.at(row) = temp;
     }
     // Decide the threshold
-    if (max_nnz_row > num_cols/2) {
-        max_nnz_row = num_cols/2;
-        for (size_type row = 0; row < num_rows; row++) {
-            coo_nnz += (row_num[row] > max_nnz_row) ? row_num[row] - max_nnz_row : 0;
-        }
+    std::sort(nnz_row.begin(), nnz_row.end());
+    size_type max_nnz_row = nnz_row.at(num_rows*8/10);
+    size_type mnnzrow = nnz_row.at(num_rows-1);
+    if (mnnzrow < max_nnz_row) {
+        max_nnz_row = mnnzrow;
     }
+    size_type coo_nnz = 0;
+    for (const auto &elem : nnz_row) {
+        coo_nnz += (elem > max_nnz_row)*(elem-max_nnz_row);
+    }
+    coo_nnz = ceildiv(coo_nnz, 32)*32;
     result[0] = max_nnz_row;
     result[1] = coo_nnz;
-
-    delete [] row_num;
 }
 
 GKO_INSTANTIATE_FOR_EACH_VALUE_TYPE(GKO_DECLARE_DENSE_GET_HYB_PARAMETER_KERNEL);

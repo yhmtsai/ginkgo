@@ -168,40 +168,40 @@ TEST(MtxReader, ReadsSparsePatternMtx)
 }
 
 
-// TEST(MtxReader, ReadsSparseComplexMtx)
-// {
-//     using cpx = std::complex<double>;
-//     using tpl = std::tuple<gko::int32, gko::int32, cpx>;
+TEST(MtxReader, ReadsSparseComplexMtx)
+{
+    using cpx = std::complex<double>;
+    using tpl = std::tuple<gko::int32, gko::int32, cpx>;
 
-//     auto data =
-//         gko::read_raw_from_mtx<cpx, gko::int32>("data/sparse_complex.mtx");
+    auto data =
+        gko::read_raw_from_mtx<cpx, gko::int32>("data/sparse_complex.mtx");
 
-//     ASSERT_EQ(data.num_rows, 2);
-//     ASSERT_EQ(data.num_cols, 3);
-//     auto &v = data.nonzeros;
-//     ASSERT_EQ(v[0], tpl(0, 0, cpx(1.0, 2.0)));
-//     ASSERT_EQ(v[1], tpl(0, 1, cpx(3.0, 1.0)));
-//     ASSERT_EQ(v[2], tpl(0, 2, cpx(2.0, 4.0)));
-//     ASSERT_EQ(v[3], tpl(1, 1, cpx(5.0, 3.0)));
-// }
+    ASSERT_EQ(data.num_rows, 2);
+    ASSERT_EQ(data.num_cols, 3);
+    auto &v = data.nonzeros;
+    ASSERT_EQ(v[0], tpl(0, 0, cpx(1.0, 2.0)));
+    ASSERT_EQ(v[1], tpl(0, 1, cpx(3.0, 1.0)));
+    ASSERT_EQ(v[2], tpl(0, 2, cpx(2.0, 4.0)));
+    ASSERT_EQ(v[3], tpl(1, 1, cpx(5.0, 3.0)));
+}
 
 
-// TEST(MtxReader, ReadsSparseComplexHermitianMtx)
-// {
-//     using cpx = std::complex<double>;
-//     using tpl = std::tuple<gko::int32, gko::int32, cpx>;
+TEST(MtxReader, ReadsSparseComplexHermitianMtx)
+{
+    using cpx = std::complex<double>;
+    using tpl = std::tuple<gko::int32, gko::int32, cpx>;
 
-//     auto data = gko::read_raw_from_mtx<cpx, gko::int32>(
-//         "data/sparse_complex_hermitian.mtx");
+    auto data = gko::read_raw_from_mtx<cpx, gko::int32>(
+        "data/sparse_complex_hermitian.mtx");
 
-//     ASSERT_EQ(data.num_rows, 2);
-//     ASSERT_EQ(data.num_cols, 3);
-//     auto &v = data.nonzeros;
-//     ASSERT_EQ(v[0], tpl(0, 1, cpx(3.0, 1.0)));
-//     ASSERT_EQ(v[1], tpl(0, 2, cpx(2.0, 4.0)));
-//     ASSERT_EQ(v[2], tpl(1, 0, cpx(3.0, -1.0)));
-//     ASSERT_EQ(v[3], tpl(2, 0, cpx(2.0, -4.0)));
-// }
+    ASSERT_EQ(data.num_rows, 2);
+    ASSERT_EQ(data.num_cols, 3);
+    auto &v = data.nonzeros;
+    ASSERT_EQ(v[0], tpl(0, 1, cpx(3.0, 1.0)));
+    ASSERT_EQ(v[1], tpl(0, 2, cpx(2.0, 4.0)));
+    ASSERT_EQ(v[2], tpl(1, 0, cpx(3.0, -1.0)));
+    ASSERT_EQ(v[3], tpl(2, 0, cpx(2.0, -4.0)));
+}
 
 
 }  // namespace

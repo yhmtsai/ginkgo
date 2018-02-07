@@ -46,25 +46,27 @@ protected:
 
     Hyb()
         : exec(gko::ReferenceExecutor::create()),
-          mtx(gko::matrix::Hyb<>::create(exec, 2, 3, 4, 1, 2))
+          mtx(gko::matrix::Hyb<>::create(exec, 2, 3, 4, 3, 0))
     {
         Mtx::value_type *v = mtx->get_values();
         Mtx::index_type *c = mtx->get_col_idxs();
         Mtx::index_type *r = mtx->get_row_idxs();
         Mtx::index_type n = mtx->get_max_nnz_row();
         Mtx::index_type coo = mtx->get_coo_nnz();
-        n = 1;
-        coo = 2;
+        n = 3;
+        coo = 0;
         c[0] = 0;
         c[1] = 1;
         c[2] = 1;
-        c[3] = 2;
-        r[0] = 0;
-        r[1] = 0;
+        c[3] = 1;
+        c[4] = 2;
+        c[5] = 1;
         v[0] = 1.0;
         v[1] = 5.0;
         v[2] = 3.0;
-        v[3] = 2.0;
+        v[3] = 0.0;
+        v[4] = 2.0;
+        v[5] = 0.0;
     }
 
     std::shared_ptr<const gko::Executor> exec;
@@ -80,18 +82,20 @@ protected:
         ASSERT_EQ(m->get_num_rows(), 2);
         ASSERT_EQ(m->get_num_cols(), 3);
         ASSERT_EQ(m->get_num_stored_elements(), 4);
-        EXPECT_EQ(coo, 2);
-        EXPECT_EQ(n, 1);
+        EXPECT_EQ(coo, 0);
+        EXPECT_EQ(n, 3);
         EXPECT_EQ(c[0], 0);
         EXPECT_EQ(c[1], 1);
         EXPECT_EQ(c[2], 1);
-        EXPECT_EQ(c[3], 2);
-        EXPECT_EQ(r[0], 0);
-        EXPECT_EQ(r[1], 0);
+        EXPECT_EQ(c[3], 1);
+        EXPECT_EQ(c[4], 2);
+        EXPECT_EQ(c[5], 1);
         EXPECT_EQ(v[0], 1.0);
         EXPECT_EQ(v[1], 5.0);
         EXPECT_EQ(v[2], 3.0);
-        EXPECT_EQ(v[3], 2.0);
+        EXPECT_EQ(v[3], 0.0);
+        EXPECT_EQ(v[4], 2.0);
+        EXPECT_EQ(v[5], 0.0);
     }
 
     void assert_empty(const Mtx *m)
