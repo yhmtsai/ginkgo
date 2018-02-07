@@ -191,7 +191,8 @@ void Hyb<ValueType, IndexType>::read_from_mtx(const std::string &filename)
     }
     // index_type max_nnz_row = data.num_cols/2;
     std::sort(nnz_row.begin(), nnz_row.end());
-    index_type max_nnz_row = nnz_row.at(data.num_rows*8/10);
+    // index_type max_nnz_row = nnz_row.at(data.num_rows*2/10);
+    index_type max_nnz_row = 0;
     index_type mnnzrow = 0;
     for (const auto &elem : nnz_row) {
         mnnzrow = std::max(mnnzrow, elem);
@@ -199,7 +200,7 @@ void Hyb<ValueType, IndexType>::read_from_mtx(const std::string &filename)
     if (mnnzrow < max_nnz_row) {
         max_nnz_row = mnnzrow;
     }
-    std::cout << "Threshold: " << max_nnz_row << " Max: " << nnz_row.at(data.num_rows-1) << "\n";
+    // std::cout << "Threshold: " << max_nnz_row << " Max: " << nnz_row.at(data.num_rows-1) << "\n";
     index_type coo_nnz = 0;
     // This is from Implementing Sparse Matrix-Vector Multiplication on
     // Throuput-Oriented Processors
@@ -210,7 +211,7 @@ void Hyb<ValueType, IndexType>::read_from_mtx(const std::string &filename)
         coo_nnz += (elem>max_nnz_row)*(elem-max_nnz_row);
     }
     coo_nnz = ceildiv(coo_nnz, 32)*32;
-    std::cout << "coo_nnz" << coo_nnz << "\n";
+    // std::cout << "coo_nnz" << coo_nnz << "\n";
     auto tmp = create(this->get_executor()->get_master(), data.num_rows,
                       data.num_cols, nnz, max_nnz_row, coo_nnz);
     size_type ind = 0, coo_ind = 0;
@@ -249,7 +250,7 @@ void Hyb<ValueType, IndexType>::read_from_mtx(const std::string &filename)
             }
         }
     }
-    std::cout << "O_O\n";
+    // std::cout << "O_O\n";
     for(coo_ind; coo_ind < coo_nnz; coo_ind++) {
         tmp->get_values()[prefix+coo_ind] = 0;
         tmp->get_col_idxs()[prefix+coo_ind] = tmp->get_col_idxs()[prefix+coo_ind-1];

@@ -153,10 +153,8 @@ __global__ __launch_bounds__(32) void coo_spmv_kernel(
     const ValueType *__restrict__ b,
     ValueType *__restrict__ c)
 {
-    // need to check whether it is correct
-    // extern __shared__ __align__(sizeof(ValueType)) unsigned char smem[];
-    // ValueType *temp_val = reinterpret_cast<ValueType *>(smem);
     ValueType temp_val = zero<ValueType>();
+    
     IndexType temp_row;
     const auto start = static_cast<size_type>(blockDim.x) * blockIdx.x * num_lines;
     int num = (nnz > start) * (nnz-start)/32;
@@ -173,7 +171,7 @@ __global__ __launch_bounds__(32) void coo_spmv_kernel(
         ind = start + threadIdx.x + i*32;
         temp_row = next_row;
         temp_val += val[ind]*b[col[ind]];
-        next_row = (i != num-1) ?row[ind+32] : 0;
+        next_row = (i != num-1) ? row[ind+32] : 0;
         // segmented scan
         is_scan = __any_sync(0xffffffff, i == num-1 || temp_row < next_row);
         if (is_scan) {
@@ -182,39 +180,86 @@ __global__ __launch_bounds__(32) void coo_spmv_kernel(
             ori_flag = flag;
             value = temp_val;
             for (int d = 0; d < logn; d++) {
-                tmp = __shfl_up_sync(0xffffffff, value, 1<<d);
-                tmpflag = __shfl_up_sync(0xffffffff, flag, 1<<d);
-                if ((threadIdx.x+1) % (1<<(d+1)) == 0) {
+                tmp = __shfl_up_sync(0xffffffff, value, 1 << d);
+                tmpflag = __shfl_up_sync(0xffffffff, flag, 1 << d);
+                if ((threadIdx.x+1) % (1 << (d+1)) == 0) {
                     value += (flag == 0) * tmp;
                     flag |= tmpflag;
                 }
             }
-            if (threadIdx.x == N-1) {
-                value = 0;
-                flag = false;
-            }
-            for (int d = logn-1; d>=0; d--) {
-                tmp = __shfl_up_sync(0xffffffff, value, 1<<d);
-                tmpflag = __shfl_up_sync(0xffffffff, flag, 1<<d);
-                flag_o = __shfl_up_sync(0xffffffff, ori_flag, (1<<d)-1);
-                tmp2 = __shfl_down_sync(0xffffffff, value, 1<<d);
-                if ((threadIdx.x+1) % (1<<(d+1)) == 0) {
-                    value = (flag_o == false) * ((tmpflag == true) ? tmp : tmp+value);
+            value = (threadIdx.x != N-1) * value;
+            flag = (threadIdx.x != N-1) * flag;
+            for (int d = logn-1; d >= 0; d--) {
+                tmp = __shfl_up_sync(0xffffffff, value, 1 << d);
+                tmpflag = __shfl_up_sync(0xffffffff, flag, 1 << d);
+                flag_o = __shfl_up_sync(0xffffffff, ori_flag, (1 << d)-1);
+                tmp2 = __shfl_down_sync(0xffffffff, value, 1 << d);
+                if ((threadIdx.x+1) % (1 << (d+1)) == 0) {
+                    value = (flag_o == false)*
+                        ((tmpflag == true) ? tmp : tmp+value);
                 }
-                if ((N+1-threadIdx.x) > (1<<d) && (threadIdx.x+1+(1<<d)) % (1<<(d+1)) == 0) {
+                if (((N+1-threadIdx.x) > (1 << d)) &&
+                    (((threadIdx.x+1+(1 << d)) % (1 << (d+1))) == 0)) {
                     value = tmp2;
                     flag = false;
                 }
             }
             tr = __shfl_down_sync(0xffffffff, temp_row, 1);
             if ((temp_row != tr) || (threadIdx.x == 31)) {
-                atomicAdd(&(c[temp_row]), value + temp_val);
+                    atomicAdd(&(c[temp_row]), value + temp_val);
             }
             temp_val = 0;
         }
     }
 
 }
+
+template <typename ValueType, typename IndexType>
+__global__ __launch_bounds__(32) void coo_spmv_kernel2(
+    const size_type num_rows, const IndexType nnz, const size_type num_lines,
+    const ValueType *__restrict__ val, const IndexType *__restrict__ col,
+    const IndexType *__restrict__ row,
+    const ValueType *__restrict__ b,
+    ValueType *__restrict__ c)
+{
+    ValueType temp_val = zero<ValueType>();
+    
+    IndexType temp_row;
+    const auto start = static_cast<size_type>(blockDim.x) * blockIdx.x * num_lines;
+    int num = (nnz > start) * (nnz-start)/32;
+    num = (num < num_lines) ? num : num_lines;
+    ValueType add_val;
+    IndexType ind = start + threadIdx.x;
+    int is_scan = 0;
+    IndexType add_row;
+    const int N = 32, logn = 5;
+    IndexType next_row = (num > 0) ? row[ind] : 0;
+    for (int i = 0; i < num; i++) {
+        ind = start + threadIdx.x + i*32;
+        temp_row = next_row;
+        temp_val += val[ind]*b[col[ind]];
+        next_row = (i != num-1) ? row[ind+32] : 0;
+        // segmented scan
+        is_scan = __any_sync(0xffffffff, i == num-1 || temp_row < next_row);
+        if (is_scan) {
+
+            for (int i = 0; i < logn; i++) {
+                add_row = __shfl_up_sync(0xffffffff, temp_row, 1 << i);
+                add_val = __shfl_up_sync(0xffffffff, temp_val, 1 << i);
+                if (threadIdx.x >= (1 << i) && add_row == temp_row) {
+                    temp_val += add_val;
+                }
+            }
+            add_row = __shfl_down_sync(0xffffffff, temp_row, 1);
+            if ((temp_row != add_row) || (threadIdx.x == 31)) {
+                    atomicAdd(&(c[temp_row]), temp_val);
+            }
+            temp_val = 0;
+        }
+    }
+
+}
+
 
 template <typename ValueType, typename IndexType>
 void spmv(const matrix::Hyb<ValueType, IndexType> *a,
@@ -235,17 +280,17 @@ void spmv(const matrix::Hyb<ValueType, IndexType> *a,
     } else if (a->get_const_coo_nnz() >= 100000 ) {
         multiple = 32;
     }
-    // int total_thread = multiple*2880/2;
-    int total_thread = multiple*3584;
+    int total_thread = multiple*2880;
+    // int total_thread = multiple*3584;
 
     int w = ceildiv(total_thread, 32);
     const auto start = a->get_num_rows()*a->get_const_max_nnz_row();
     int num_lines = ceildiv(a->get_const_coo_nnz(), w*32);
-    std::cout << "Num_lines: " << num_lines << "\n";
+    // std::cout << "Num_lines: " << num_lines << "\n";
     const dim3 coo_block(32, 1, 1);
     const dim3 coo_grid(w, 1, 1);
     if (num_lines > 0) {
-        coo_spmv_kernel<<<coo_grid, coo_block>>>(
+        coo_spmv_kernel2<<<coo_grid, coo_block>>>(
             a->get_num_rows(), a->get_const_coo_nnz(), num_lines,
             as_cuda_type(a->get_const_values()+start), a->get_const_col_idxs()+start,
             as_cuda_type(a->get_const_row_idxs()),
