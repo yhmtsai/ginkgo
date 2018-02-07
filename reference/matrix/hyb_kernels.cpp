@@ -38,7 +38,6 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "core/base/math.hpp"
 #include "core/matrix/dense.hpp"
 
-
 namespace gko {
 namespace kernels {
 namespace reference {
@@ -75,19 +74,7 @@ void spmv(const matrix::Hyb<ValueType, IndexType> *a,
                 c->at(coo_row[i], j) += coo_vals[i]*b->at(coo_col[i], j);
         }
     }
-    // for (size_type row = 0; row < a->get_num_rows(); ++row) {
-    //     for (size_type j = 0; j < c->get_num_cols(); ++j) {
-    //         c->at(row, j) = zero<ValueType>();
-    //     }
-    //     for (size_type k = row_ptrs[row];
-    //          k < static_cast<size_type>(row_ptrs[row + 1]); ++k) {
-    //         auto val = vals[k];
-    //         auto col = col_idxs[k];
-    //         for (size_type j = 0; j < c->get_num_cols(); ++j) {
-    //             c->at(row, j) += val * b->at(col, j);
-    //         }
-    //     }
-    // }
+    
 }
 
 GKO_INSTANTIATE_FOR_EACH_VALUE_AND_INDEX_TYPE(GKO_DECLARE_HYB_SPMV_KERNEL);
@@ -137,27 +124,35 @@ template <typename ValueType, typename IndexType>
 void convert_to_dense(matrix::Dense<ValueType> *result,
                       const matrix::Hyb<ValueType, IndexType> *source)
 {
-	NOT_IMPLEMENTED;
-    // auto exec = result->get_executor();
-    // if (exec != exec->get_master()) {
-    //     NOT_SUPPORTED(exec);
-    // }
+	// NOT_IMPLEMENTED;
+    auto exec = result->get_executor();
+    if (exec != exec->get_master()) {
+        NOT_SUPPORTED(exec);
+    }
 
-    // auto num_rows = source->get_num_rows();
-    // auto num_cols = source->get_num_cols();
-    // auto row_ptrs = source->get_const_row_ptrs();
-    // auto col_idxs = source->get_const_col_idxs();
-    // auto vals = source->get_const_values();
+    auto num_rows = source->get_num_rows();
+    auto num_cols = source->get_num_cols();
+    auto ell_col = source->get_const_col_idxs();
+    auto ell_val = source->get_const_values();
+    auto max_nnz_row = source->get_const_max_nnz_row();
+    auto coo_nnz = source->get_const_coo_nnz();
+    auto coo_col = ell_col + max_nnz_row * num_rows;
+    auto coo_row = source->get_const_row_idxs();
+    auto coo_val = ell_val + max_nnz_row * num_rows;
 
-    // for (size_type row = 0; row < num_rows; ++row) {
-    //     for (size_type col = 0; col < num_cols; ++col) {
-    //         result->at(row, col) = zero<ValueType>();
-    //     }
-    //     for (size_type i = row_ptrs[row];
-    //          i < static_cast<size_type>(row_ptrs[row + 1]); ++i) {
-    //         result->at(row, col_idxs[i]) = vals[i];
-    //     }
-    // }
+    for (size_type row = 0; row < num_rows; ++row) {
+        for (size_type col = 0; col < num_cols; ++col) {
+            result->at(row, col) = zero<ValueType>();
+        }
+    }
+    for (size_type i = 0; i < num_rows; i++) {
+        for (size_type j = 0; j < max_nnz_row; j++) {
+            result->at(i, ell_col[i + j*num_rows]) += ell_val[i + j*num_rows];
+        }
+    }
+    for (size_type i = 0; i < coo_nnz; i++) {
+        result->at(coo_row[i], coo_col[i]) += coo_val[i];
+    }
 }
 
 
