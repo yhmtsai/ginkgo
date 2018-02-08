@@ -191,8 +191,8 @@ void Hyb<ValueType, IndexType>::read_from_mtx(const std::string &filename)
     }
     std::sort(nnz_row.begin(), nnz_row.end());
     // Use percentile 80
-    index_type max_nnz_row = nnz_row.at(data.num_rows*8/10);
-    // index_type max_nnz_row = 0;
+    // index_type max_nnz_row = nnz_row.at(data.num_rows*8/10);
+    index_type max_nnz_row = 0;
     index_type mnnzrow = 0;
     for (const auto &elem : nnz_row) {
         mnnzrow = std::max(mnnzrow, elem);
