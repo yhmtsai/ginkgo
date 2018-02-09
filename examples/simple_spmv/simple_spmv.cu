@@ -90,7 +90,7 @@ int main(int argc, char *argv[])
         printf("Usage: ./simple_spmv deviceid path/to/A\n");
         exit(1);
     }
-    std::cout << "Device ID: " << deviceid << "\n";
+    // std::cout << "Device ID: " << deviceid << "\n";
     cudaSetDevice(deviceid);
     std::shared_ptr<gko::Executor> exec =
         gko::GpuExecutor::create(deviceid, gko::CpuExecutor::create());
