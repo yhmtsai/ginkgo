@@ -41,23 +41,20 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <iostream>
 #include <cstdio>
 
-#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ < 600
-__device__ double atomicAdd(double* address, double val)
+#if (defined( CUDA_VERSION ) && ( CUDA_VERSION < 8000 )) \
+    || (defined( __CUDA_ARCH__ ) && ( __CUDA_ARCH__ < 600 ))
+__forceinline__ __device__ static double atomicAdd(double* addr, double val)
 {
-    unsigned long long int* address_as_ull =
-                              (unsigned long long int*)address;
-    unsigned long long int old = *address_as_ull, assumed;
-
+    double old = *addr, assumed;
     do {
         assumed = old;
-        old = atomicCAS(address_as_ull, assumed,
-                        __double_as_longlong(val +
-                               __longlong_as_double(assumed)));
+        old = __longlong_as_double(
+                    atomicCAS((unsigned long long int*)addr,
+                              __double_as_longlong(assumed),
+                              __double_as_longlong(val+assumed)));
+    } while(assumed != old);
 
-    // Note: uses integer comparison to avoid hang in case of NaN (since NaN != NaN)
-    } while (assumed != old);
-
-    return __longlong_as_double(old);
+    return old;
 }
 #endif
 
@@ -280,7 +277,7 @@ __global__ __launch_bounds__(32) void coo_spmv_kernel(
 }
 
 template <typename ValueType, typename IndexType>
-__global__ __launch_bounds__(32) void coo_spmv_kernel2(
+__global__ __launch_bounds__(128) void coo_spmv_kernel2(
     const size_type num_rows, const IndexType nnz, const size_type num_lines,
     const ValueType *__restrict__ val, const IndexType *__restrict__ col,
     const IndexType *__restrict__ row,
@@ -290,7 +287,8 @@ __global__ __launch_bounds__(32) void coo_spmv_kernel2(
     ValueType temp_val = zero<ValueType>();
     
     IndexType temp_row;
-    const auto start = static_cast<size_type>(blockDim.x) * blockIdx.x * num_lines;
+    const auto start = static_cast<size_type>(blockDim.x) * blockIdx.x *
+        blockDim.y * num_lines + threadIdx.y * blockDim.x * num_lines;
     int num = (nnz > start) * (nnz-start)/32;
     num = (num < num_lines) ? num : num_lines;
     ValueType add_val;
@@ -392,7 +390,7 @@ void get_opt_warp_count(
 template <typename ValueType, typename IndexType>
 void spmv(const matrix::Hyb<ValueType, IndexType> *a,
           const matrix::Dense<ValueType> *b, matrix::Dense<ValueType> *c) {
-        
+    const int warps_per_block = 4;
     const dim3 block_size(default_block_size, 1, 1);
     const dim3 grid_size(
         ceildiv(a->get_num_rows(), block_size.x), 1, 1);
@@ -402,14 +400,14 @@ void spmv(const matrix::Hyb<ValueType, IndexType> *a,
         as_cuda_type(a->get_const_values()), a->get_const_col_idxs(),
         as_cuda_type(b->get_const_values()),
         as_cuda_type(c->get_values()));
-    int multiple = 8;
+    int multiple = 32;
     if (a->get_const_coo_nnz() >= 2000000) {
         multiple = 128;
     } else if (a->get_const_coo_nnz() >= 200000 ) {
         multiple = 32;
     }
     if (a->get_const_coo_nnz() > 0) {
-        int nwarps = 320 * multiple;
+        int nwarps = 112 * multiple;
         // get_opt_warp_count(multiple, &nwarps);
         // // std::cout << "nwarps = " << nwarps << "\n";
         if (nwarps > ceildiv(a->get_const_coo_nnz(), 32)) {
@@ -424,9 +422,8 @@ void spmv(const matrix::Hyb<ValueType, IndexType> *a,
         const auto start = a->get_num_rows()*a->get_const_max_nnz_row();
         int num_lines = ceildiv(a->get_const_coo_nnz(), nwarps*32);
         // std::cout << "Num_lines: " << num_lines << "\n";
-        const dim3 coo_block(32, 1, 1);
-        const dim3 coo_grid(nwarps, 1, 1);
-
+        const dim3 coo_block(32, warps_per_block, 1);
+        const dim3 coo_grid(ceildiv(nwarps, warps_per_block));
             coo_spmv_kernel2<<<coo_grid, coo_block>>>(
                 a->get_num_rows(), a->get_const_coo_nnz(), num_lines,
                 as_cuda_type(a->get_const_values()+start), a->get_const_col_idxs()+start,
