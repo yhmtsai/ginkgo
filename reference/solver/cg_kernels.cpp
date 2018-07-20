@@ -34,6 +34,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "core/solver/cg_kernels.hpp"
 
 
+#include "core/base/array.hpp"
 #include "core/base/exception_helpers.hpp"
 #include "core/base/math.hpp"
 #include "core/base/types.hpp"
@@ -50,12 +51,13 @@ void initialize(std::shared_ptr<const ReferenceExecutor> exec,
                 const matrix::Dense<ValueType> *b, matrix::Dense<ValueType> *r,
                 matrix::Dense<ValueType> *z, matrix::Dense<ValueType> *p,
                 matrix::Dense<ValueType> *q, matrix::Dense<ValueType> *prev_rho,
-                matrix::Dense<ValueType> *rho, Array<bool> *converged)
+                matrix::Dense<ValueType> *rho,
+                Array<stopping_status> *stop_status)
 {
     for (size_type j = 0; j < b->get_size()[1]; ++j) {
         rho->at(j) = zero<ValueType>();
         prev_rho->at(j) = one<ValueType>();
-        converged->get_data()[j] = false;
+        stop_status->get_data()[j].reset();
     }
     for (size_type i = 0; i < b->get_size()[0]; ++i) {
         for (size_type j = 0; j < b->get_size()[1]; ++j) {
@@ -97,7 +99,7 @@ void step_1(std::shared_ptr<const ReferenceExecutor> exec,
             matrix::Dense<ValueType> *p, const matrix::Dense<ValueType> *z,
             const matrix::Dense<ValueType> *rho,
             const matrix::Dense<ValueType> *prev_rho,
-            const Array<bool> &converged)
+            const Array<stopping_status> *stop_status)
 {
     for (size_type i = 0; i < p->get_size()[0]; ++i) {
         for (size_type j = 0; j < p->get_size()[1]; ++j) {
@@ -123,7 +125,8 @@ void step_2(std::shared_ptr<const ReferenceExecutor> exec,
             const matrix::Dense<ValueType> *p,
             const matrix::Dense<ValueType> *q,
             const matrix::Dense<ValueType> *beta,
-            const matrix::Dense<ValueType> *rho, const Array<bool> &converged)
+            const matrix::Dense<ValueType> *rho,
+            const Array<stopping_status> *stop_status)
 {
     for (size_type i = 0; i < x->get_size()[0]; ++i) {
         for (size_type j = 0; j < x->get_size()[1]; ++j) {

@@ -92,8 +92,7 @@ void step_1(std::shared_ptr<const ReferenceExecutor> exec,
             const matrix::Dense<ValueType> *prev_rho,
             const matrix::Dense<ValueType> *alpha,
             const matrix::Dense<ValueType> *omega,
-            const Array<stopping_status> &stop_status)
-
+            const Array<stopping_status> *stop_status)
 {
     for (size_type i = 0; i < p->get_size()[0]; ++i) {
         for (size_type j = 0; j < p->get_size()[1]; ++j) {
@@ -122,7 +121,7 @@ void step_2(std::shared_ptr<const ReferenceExecutor> exec,
             const matrix::Dense<ValueType> *rho,
             matrix::Dense<ValueType> *alpha,
             const matrix::Dense<ValueType> *beta,
-            const Array<stopping_status> &stop_status)
+            const Array<stopping_status> *stop_status)
 {
     for (size_type i = 0; i < s->get_size()[0]; ++i) {
         for (size_type j = 0; j < s->get_size()[1]; ++j) {
@@ -150,7 +149,7 @@ void step_3(
     const matrix::Dense<ValueType> *t, const matrix::Dense<ValueType> *y,
     const matrix::Dense<ValueType> *z, const matrix::Dense<ValueType> *alpha,
     const matrix::Dense<ValueType> *beta, const matrix::Dense<ValueType> *gamma,
-    matrix::Dense<ValueType> *omega, const Array<stopping_status> &stop_status)
+    matrix::Dense<ValueType> *omega, const Array<stopping_status> *stop_status)
 {
     for (size_type j = 0; j < x->get_size()[1]; ++j) {
         if (stop_status.get_const_data()[j].has_stopped()) {

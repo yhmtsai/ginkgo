@@ -31,54 +31,58 @@ ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ******************************<GINKGO LICENSE>*******************************/
 
-#include <core/stop/residual_norm_reduction.hpp>
+#include "core/matrix/sellp_kernels.hpp"
 
 
-#include <gtest/gtest.h>
+#include "core/base/exception_helpers.hpp"
+#include "core/base/math.hpp"
+#include "core/base/types.hpp"
+#include "cuda/base/cusparse_bindings.hpp"
+#include "cuda/base/types.hpp"
 
 
-namespace {
+namespace gko {
+namespace kernels {
+namespace cuda {
+namespace sellp {
 
 
-constexpr double reduction_factor = 1.0e-16;
-
-
-class ResidualNormReduction : public ::testing::Test {
-protected:
-    ResidualNormReduction()
-    {
-        exec_ = gko::ReferenceExecutor::create();
-        factory_ = gko::stop::ResidualNormReduction<>::Factory::create()
-                       .with_reduction_factor(reduction_factor)
-                       .on_executor(exec_);
-    }
-
-    std::unique_ptr<gko::stop::ResidualNormReduction<>::Factory> factory_;
-    std::shared_ptr<const gko::Executor> exec_;
-};
-
-
-TEST_F(ResidualNormReduction, CanCreateFactory)
+template <typename ValueType, typename IndexType>
+void spmv(std::shared_ptr<const CudaExecutor> exec,
+          const matrix::Sellp<ValueType, IndexType> *a,
+          const matrix::Dense<ValueType> *b, matrix::Dense<ValueType> *c)
 {
-    ASSERT_NE(factory_, nullptr);
-    ASSERT_EQ(factory_->get_parameters().reduction_factor, reduction_factor);
-    ASSERT_EQ(factory_->get_executor(), exec_);
+    NOT_IMPLEMENTED;
 }
 
-TEST_F(ResidualNormReduction, CannotCreateCriterionWithoutB)
+GKO_INSTANTIATE_FOR_EACH_VALUE_AND_INDEX_TYPE(GKO_DECLARE_SELLP_SPMV_KERNEL);
+
+
+template <typename ValueType, typename IndexType>
+void advanced_spmv(std::shared_ptr<const CudaExecutor> exec,
+                   const matrix::Dense<ValueType> *alpha,
+                   const matrix::Sellp<ValueType, IndexType> *a,
+                   const matrix::Dense<ValueType> *b,
+                   const matrix::Dense<ValueType> *beta,
+                   matrix::Dense<ValueType> *c)
 {
-    ASSERT_THROW(factory_->generate(nullptr, nullptr, nullptr, nullptr),
-                 gko::NotSupported);
+    NOT_IMPLEMENTED;
 }
 
-TEST_F(ResidualNormReduction, CanCreateCriterionWithB)
-{
-    std::shared_ptr<gko::LinOp> scalar =
-        gko::initialize<gko::matrix::Dense<>>({1.0}, exec_);
-    auto criterion =
-        factory_->generate(nullptr, nullptr, nullptr, scalar.get());
-    ASSERT_NE(criterion, nullptr);
-}
+GKO_INSTANTIATE_FOR_EACH_VALUE_AND_INDEX_TYPE(
+    GKO_DECLARE_SELLP_ADVANCED_SPMV_KERNEL);
 
 
-}  // namespace
+template <typename ValueType, typename IndexType>
+void convert_to_dense(
+    std::shared_ptr<const CudaExecutor> exec, matrix::Dense<ValueType> *result,
+    const matrix::Sellp<ValueType, IndexType> *source) NOT_IMPLEMENTED;
+
+GKO_INSTANTIATE_FOR_EACH_VALUE_AND_INDEX_TYPE(
+    GKO_DECLARE_SELLP_CONVERT_TO_DENSE_KERNEL);
+
+
+}  // namespace sellp
+}  // namespace cuda
+}  // namespace kernels
+}  // namespace gko

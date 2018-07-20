@@ -52,13 +52,13 @@ void initialize(std::shared_ptr<const ReferenceExecutor> exec,
                 matrix::Dense<ValueType> *q, matrix::Dense<ValueType> *t,
                 matrix::Dense<ValueType> *prev_rho,
                 matrix::Dense<ValueType> *rho, matrix::Dense<ValueType> *rho_t,
-                Array<bool> *converged)
+                Array<stopping_status> *stop_status)
 {
     for (size_type j = 0; j < b->get_size()[1]; ++j) {
         rho->at(j) = zero<ValueType>();
         prev_rho->at(j) = one<ValueType>();
         rho_t->at(j) = one<ValueType>();
-        converged->get_data()[j] = false;
+        stop_status->get_data()[j].reset();
     }
     for (size_type i = 0; i < b->get_size()[0]; ++i) {
         for (size_type j = 0; j < b->get_size()[1]; ++j) {
@@ -100,7 +100,7 @@ void step_1(std::shared_ptr<const ReferenceExecutor> exec,
             matrix::Dense<ValueType> *p, const matrix::Dense<ValueType> *z,
             const matrix::Dense<ValueType> *rho_t,
             const matrix::Dense<ValueType> *prev_rho,
-            const Array<bool> &converged)
+            const Array<stopping_status> *stop_status)
 {
     for (size_type i = 0; i < p->get_size()[0]; ++i) {
         for (size_type j = 0; j < p->get_size()[1]; ++j) {
@@ -126,7 +126,8 @@ void step_2(std::shared_ptr<const ReferenceExecutor> exec,
             matrix::Dense<ValueType> *t, const matrix::Dense<ValueType> *p,
             const matrix::Dense<ValueType> *q,
             const matrix::Dense<ValueType> *beta,
-            const matrix::Dense<ValueType> *rho, const Array<bool> &converged)
+            const matrix::Dense<ValueType> *rho,
+            const Array<stopping_status> *stop_status)
 {
     for (size_type i = 0; i < x->get_size()[0]; ++i) {
         for (size_type j = 0; j < x->get_size()[1]; ++j) {
