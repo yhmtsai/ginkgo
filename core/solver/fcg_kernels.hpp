@@ -56,6 +56,14 @@ namespace fcg {
                     Array<stopping_status> *stop_status)
 
 
+#define GKO_DECLARE_FCG_TEST_CONVERGENCE_KERNEL(_type)                 \
+    void test_convergence(std::shared_ptr<const DefaultExecutor> exec, \
+                          const matrix::Dense<_type> *tau,             \
+                          const matrix::Dense<_type> *orig_tau,        \
+                          remove_complex<_type> rel_residual_goal,     \
+                          Array<bool> *converged, bool *all_converged)
+
+
 #define GKO_DECLARE_FCG_STEP_1_KERNEL(_type)                            \
     void step_1(std::shared_ptr<const DefaultExecutor> exec,            \
                 matrix::Dense<_type> *p, const matrix::Dense<_type> *z, \
@@ -73,12 +81,14 @@ namespace fcg {
         const Array<stopping_status> *stop_status)
 
 
-#define DECLARE_ALL_AS_TEMPLATES                  \
-    template <typename ValueType>                 \
-    GKO_DECLARE_FCG_INITIALIZE_KERNEL(ValueType); \
-    template <typename ValueType>                 \
-    GKO_DECLARE_FCG_STEP_1_KERNEL(ValueType);     \
-    template <typename ValueType>                 \
+#define DECLARE_ALL_AS_TEMPLATES                        \
+    template <typename ValueType>                       \
+    GKO_DECLARE_FCG_INITIALIZE_KERNEL(ValueType);       \
+    template <typename ValueType>                       \
+    GKO_DECLARE_FCG_TEST_CONVERGENCE_KERNEL(ValueType); \
+    template <typename ValueType>                       \
+    GKO_DECLARE_FCG_STEP_1_KERNEL(ValueType);           \
+    template <typename ValueType>                       \
     GKO_DECLARE_FCG_STEP_2_KERNEL(ValueType)
 
 

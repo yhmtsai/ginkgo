@@ -86,11 +86,11 @@ void Fcg<ValueType>::apply_impl(const LinOp *b, LinOp *x) const
     auto rho = Vector::create_with_config_of(alpha.get());
     auto rho_t = Vector::create_with_config_of(alpha.get());
 
-    auto starting_tau = Vector::create_with_config_of(tau.get());
+    auto starting_tau = Vector::create_with_config_of(rho.get());
     Array<bool> converged(exec, dense_b->get_size()[1]);
     bool one_changed{};
     Array<stopping_status> stop_status(alpha->get_executor(),
-                                       dense_b->get_size().num_cols);
+                                       dense_b->get_size()[1]);
 
     // TODO: replace this with automatic merged kernel generator
     exec->run(TemplatedOperation<ValueType>::make_initialize_operation(

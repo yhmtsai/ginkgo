@@ -103,7 +103,7 @@ void step_1(std::shared_ptr<const ReferenceExecutor> exec,
 {
     for (size_type i = 0; i < p->get_size()[0]; ++i) {
         for (size_type j = 0; j < p->get_size()[1]; ++j) {
-            if (converged.get_const_data()[j]) {
+            if (stop_status->get_const_data()[j].has_stopped()) {
                 continue;
             }
             if (prev_rho->at(j) == zero<ValueType>()) {
@@ -130,7 +130,7 @@ void step_2(std::shared_ptr<const ReferenceExecutor> exec,
 {
     for (size_type i = 0; i < x->get_size()[0]; ++i) {
         for (size_type j = 0; j < x->get_size()[1]; ++j) {
-            if (converged.get_const_data()[j]) {
+            if (stop_status->get_const_data()[j].has_stopped()) {
                 continue;
             }
             if (beta->at(j) != zero<ValueType>()) {

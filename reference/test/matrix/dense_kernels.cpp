@@ -526,8 +526,8 @@ TEST_F(Dense, ConvertsToHybridAutomatically)
 
 TEST_F(Dense, MovesToHybridWithStrideAutomatically)
 {
-    auto hybrid_mtx =
-        gko::matrix::Hybrid<>::create(mtx4->get_executor(), gko::dim<2>{}, 0, 3);
+    auto hybrid_mtx = gko::matrix::Hybrid<>::create(mtx4->get_executor(),
+                                                    gko::dim<2>{}, 0, 3);
 
     mtx4->move_to(hybrid_mtx.get());
 
@@ -563,8 +563,8 @@ TEST_F(Dense, MovesToHybridWithStrideAutomatically)
 
 TEST_F(Dense, ConvertsToHybridWithStrideAutomatically)
 {
-    auto hybrid_mtx =
-        gko::matrix::Hybrid<>::create(mtx4->get_executor(), gko::dim<2>{}, 0, 3);
+    auto hybrid_mtx = gko::matrix::Hybrid<>::create(mtx4->get_executor(),
+                                                    gko::dim<2>{}, 0, 3);
 
     mtx4->convert_to(hybrid_mtx.get());
 
@@ -763,7 +763,7 @@ TEST_F(Dense, ConvertsToSellp)
     auto s = sellp_mtx->get_const_slice_sets();
     auto l = sellp_mtx->get_const_slice_lengths();
 
-    ASSERT_EQ(sellp_mtx->get_size(), gko::dim(2, 3));
+    ASSERT_EQ(sellp_mtx->get_size(), gko::dim<2>(2, 3));
     ASSERT_EQ(sellp_mtx->get_total_cols(), 3);
     ASSERT_EQ(sellp_mtx->get_num_stored_elements(),
               3 * gko::matrix::default_slice_size);
@@ -799,7 +799,7 @@ TEST_F(Dense, MovesToSellp)
     auto s = sellp_mtx->get_const_slice_sets();
     auto l = sellp_mtx->get_const_slice_lengths();
 
-    ASSERT_EQ(sellp_mtx->get_size(), gko::dim(2, 3));
+    ASSERT_EQ(sellp_mtx->get_size(), gko::dim<2>(2, 3));
     ASSERT_EQ(sellp_mtx->get_total_cols(), 3);
     ASSERT_EQ(sellp_mtx->get_num_stored_elements(),
               3 * gko::matrix::default_slice_size);
@@ -826,8 +826,8 @@ TEST_F(Dense, MovesToSellp)
 
 TEST_F(Dense, ConvertsToSellpWithSliceSizeAndStrideFactor)
 {
-    auto sellp_mtx =
-        gko::matrix::Sellp<>::create(mtx8->get_executor(), gko::dim{}, 2, 2, 0);
+    auto sellp_mtx = gko::matrix::Sellp<>::create(mtx8->get_executor(),
+                                                  gko::dim<2>{}, 2, 2, 0);
 
     mtx8->convert_to(sellp_mtx.get());
 
@@ -836,7 +836,7 @@ TEST_F(Dense, ConvertsToSellpWithSliceSizeAndStrideFactor)
     auto s = sellp_mtx->get_const_slice_sets();
     auto l = sellp_mtx->get_const_slice_lengths();
 
-    ASSERT_EQ(sellp_mtx->get_size(), gko::dim(2, 3));
+    ASSERT_EQ(sellp_mtx->get_size(), gko::dim<2>(2, 3));
     ASSERT_EQ(sellp_mtx->get_total_cols(), 4);
     ASSERT_EQ(sellp_mtx->get_num_stored_elements(), 8);
     ASSERT_EQ(sellp_mtx->get_slice_size(), 2);
@@ -865,8 +865,8 @@ TEST_F(Dense, ConvertsToSellpWithSliceSizeAndStrideFactor)
 
 TEST_F(Dense, MovesToSellpWithSliceSizeAndStrideFactor)
 {
-    auto sellp_mtx =
-        gko::matrix::Sellp<>::create(mtx8->get_executor(), gko::dim{}, 2, 2, 0);
+    auto sellp_mtx = gko::matrix::Sellp<>::create(mtx8->get_executor(),
+                                                  gko::dim<2>{}, 2, 2, 0);
 
     mtx8->move_to(sellp_mtx.get());
 
@@ -875,7 +875,7 @@ TEST_F(Dense, MovesToSellpWithSliceSizeAndStrideFactor)
     auto s = sellp_mtx->get_const_slice_sets();
     auto l = sellp_mtx->get_const_slice_lengths();
 
-    ASSERT_EQ(sellp_mtx->get_size(), gko::dim(2, 3));
+    ASSERT_EQ(sellp_mtx->get_size(), gko::dim<2>(2, 3));
     ASSERT_EQ(sellp_mtx->get_total_cols(), 4);
     ASSERT_EQ(sellp_mtx->get_num_stored_elements(), 8);
     ASSERT_EQ(sellp_mtx->get_slice_size(), 2);

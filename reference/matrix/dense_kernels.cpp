@@ -363,8 +363,8 @@ void convert_to_sellp(std::shared_ptr<const ReferenceExecutor> exec,
                       matrix::Sellp<ValueType, IndexType> *result,
                       const matrix::Dense<ValueType> *source)
 {
-    auto num_rows = result->get_size().num_rows;
-    auto num_cols = result->get_size().num_cols;
+    auto num_rows = result->get_size()[0];
+    auto num_cols = result->get_size()[1];
     auto vals = result->get_values();
     auto col_idxs = result->get_col_idxs();
     auto slice_lengths = result->get_slice_lengths();
@@ -510,8 +510,8 @@ void calculate_total_cols(std::shared_ptr<const ReferenceExecutor> exec,
                           const matrix::Dense<ValueType> *source,
                           size_type *result, size_type stride_factor)
 {
-    auto num_rows = source->get_size().num_rows;
-    auto num_cols = source->get_size().num_cols;
+    auto num_rows = source->get_size()[0];
+    auto num_cols = source->get_size()[1];
     auto slice_size = matrix::default_slice_size;
     auto slice_num = ceildiv(num_rows, slice_size);
     auto total_cols = 0;

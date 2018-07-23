@@ -112,7 +112,7 @@ void step_1(std::shared_ptr<const ReferenceExecutor> exec,
             const Array<stopping_status> *stop_status)
 {
     for (size_type j = 0; j < p->get_size()[1]; ++j) {
-        if (converged.get_const_data()[j]) {
+        if (stop_status->get_const_data()[j].has_stopped()) {
             continue;
         }
         if (rho_prev->at(j) != zero<ValueType>()) {
@@ -121,7 +121,7 @@ void step_1(std::shared_ptr<const ReferenceExecutor> exec,
     }
     for (size_type i = 0; i < p->get_size()[0]; ++i) {
         for (size_type j = 0; j < p->get_size()[1]; ++j) {
-            if (converged.get_const_data()[j]) {
+            if (stop_status->get_const_data()[j].has_stopped()) {
                 continue;
             }
             u->at(i, j) = r->at(i, j) + beta->at(j) * q->at(i, j);
@@ -145,7 +145,7 @@ void step_2(std::shared_ptr<const ReferenceExecutor> exec,
             const Array<stopping_status> *stop_status)
 {
     for (size_type j = 0; j < u->get_size()[1]; ++j) {
-        if (converged.get_const_data()[j]) {
+        if (stop_status->get_const_data()[j].has_stopped()) {
             continue;
         }
         if (gamma->at(j) != zero<ValueType>()) {
@@ -154,7 +154,7 @@ void step_2(std::shared_ptr<const ReferenceExecutor> exec,
     }
     for (size_type i = 0; i < u->get_size()[0]; ++i) {
         for (size_type j = 0; j < u->get_size()[1]; ++j) {
-            if (converged.get_const_data()[j]) {
+            if (stop_status->get_const_data()[j].has_stopped()) {
                 continue;
             }
             q->at(i, j) = u->at(i, j) - alpha->at(j) * v_hat->at(i, j);
@@ -175,7 +175,7 @@ void step_3(std::shared_ptr<const ReferenceExecutor> exec,
 {
     for (size_type i = 0; i < x->get_size()[0]; ++i) {
         for (size_type j = 0; j < x->get_size()[1]; ++j) {
-            if (converged.get_const_data()[j]) {
+            if (stop_status->get_const_data()[j].has_stopped()) {
                 continue;
             }
             x->at(i, j) += alpha->at(j) * u_hat->at(i, j);

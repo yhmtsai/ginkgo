@@ -197,7 +197,7 @@ void Hybrid<ValueType, IndexType>::write(mat_data &data) const
     auto coo_vals = tmp->get_const_coo_values();
     auto coo_col_idxs = tmp->get_const_coo_col_idxs();
     auto coo_row_idxs = tmp->get_const_coo_row_idxs();
-    for (size_type row = 0; row < tmp->get_size().num_rows; ++row) {
+    for (size_type row = 0; row < tmp->get_size()[0]; ++row) {
         for (size_type i = 0; i < tmp->get_ell_num_stored_elements_per_row();
              ++i) {
             const auto val = tmp->ell_val_at(row, i);
