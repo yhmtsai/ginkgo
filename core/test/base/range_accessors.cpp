@@ -122,4 +122,86 @@ TEST_F(RowMajorAccessor, CanAssignSubranges)
 }
 
 
+class ColumnMajorAccessor : public ::testing::Test {
+protected:
+    using span = gko::span;
+
+    using column_major_int_range = gko::range<gko::accessor::column_major<int, 2>>;
+
+    // clang-format off
+    int data[9]{
+        1, 2, -1,
+        3, 4, -2,
+        5, 6, -3
+    };
+    //clang-format on
+    column_major_int_range r{data, 2u, 3u, 3u};
+};
+
+
+TEST_F(ColumnMajorAccessor, CanAccessData)
+{
+    EXPECT_EQ(r(0, 0), 1);
+    EXPECT_EQ(r(0, 1), 3);
+    EXPECT_EQ(r(0, 2), 5);
+    EXPECT_EQ(r(1, 0), 2);
+    EXPECT_EQ(r(1, 1), 4);
+    EXPECT_EQ(r(1, 2), 6);
+}
+
+
+TEST_F(ColumnMajorAccessor, CanCreateSubrange)
+{
+    auto subr = r(span{0, 2}, span{1, 3});
+
+    EXPECT_EQ(subr(0, 0), 3);
+    EXPECT_EQ(subr(0, 1), 5);
+    EXPECT_EQ(subr(1, 0), 4);
+    EXPECT_EQ(subr(1, 1), 6);
+}
+
+
+TEST_F(ColumnMajorAccessor, CanCreateRowVector)
+{
+    auto subr = r(1, span{0, 3});
+
+    EXPECT_EQ(subr(0, 0), 2);
+    EXPECT_EQ(subr(0, 1), 4);
+    EXPECT_EQ(subr(0, 2), 6);
+}
+
+
+TEST_F(ColumnMajorAccessor, CanCreateColumnVector)
+{
+    auto subr = r(span{0, 2}, 0);
+
+    EXPECT_EQ(subr(0, 0), 1);
+    EXPECT_EQ(subr(1, 0), 2);
+}
+
+
+TEST_F(ColumnMajorAccessor, CanAssignValues)
+{
+    r(1, 1) = r(0, 0);
+
+    EXPECT_EQ(data[4], 1);
+}
+
+
+TEST_F(ColumnMajorAccessor, CanAssignSubranges)
+{
+    r(span{0, 2}, 0) = r(span{0, 2}, 1);
+
+    EXPECT_EQ(data[0], 3);
+    EXPECT_EQ(data[1], 4);
+    EXPECT_EQ(data[2], -1);
+    EXPECT_EQ(data[3], 3);
+    EXPECT_EQ(data[4], 4);
+    EXPECT_EQ(data[5], -2);
+    EXPECT_EQ(data[6], 5);
+    EXPECT_EQ(data[7], 6);
+    EXPECT_EQ(data[8], -3);
+}
+
+
 }  // namespace
