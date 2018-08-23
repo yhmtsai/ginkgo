@@ -130,11 +130,8 @@ __device__ __forceinline__ void process_window(
         if (last) {
             if (is_first_in_segment) {
                 if (threadIdx.x == cuda_config::warp_size - 1) {
-                    const auto warp_idx =
-                        static_cast<size_type>(blockIdx.x) * blockDim.y +
-                        threadIdx.y;
-                    last_val[warp_idx] = scale(*temp_val);
-                    last_row[warp_idx] = curr_row;
+                    *last_val = scale(*temp_val);
+                    *last_row = curr_row;
                 } else {
                     c[curr_row * c_stride + column_id] += scale(*temp_val);
                 }
@@ -175,82 +172,38 @@ __device__ void spmv_kernel(const size_type nnz, const size_type num_lines,
                             const size_type b_stride, ValueType *__restrict__ c,
                             const size_type c_stride, Closure scale)
 {
-    ValueType temp_val = zero<ValueType>();
-    const auto start = static_cast<size_type>(blockDim.x) * blockIdx.x *
-                           blockDim.y * num_lines +
-                       threadIdx.y * blockDim.x * num_lines;
+    const auto warp_idx =
+        static_cast<size_type>(blockIdx.x) * blockDim.y + threadIdx.y;
+    const auto start = warp_idx * num_lines * blockDim.x;
     const IndexType column_id = blockIdx.y;
+    ValueType temp_val = zero<ValueType>();
     size_type num =
         (nnz > start) * ceildiv(nnz - start, cuda_config::warp_size);
     num = min(num, num_lines);
     const IndexType ind_start = start + threadIdx.x;
     const IndexType ind_end = ind_start + (num - 2) * cuda_config::warp_size;
     IndexType ind = ind_start;
-    bool is_first_in_segment = true;
     const size_type num_rows = row[nnz - 1];
     IndexType curr_row = (ind < nnz) ? row[ind] : num_rows - 1;
     for (; ind < ind_end; ind += cuda_config::warp_size) {
         process_window<false, false>(num_rows, nnz, ind, &temp_val, &curr_row,
-                                     last_val, last_row, val, col, row, b,
+                                     &(last_val[warp_idx]),
+                                     &(last_row[warp_idx]), val, col, row, b,
                                      b_stride, c, c_stride, column_id, scale);
-
-        // temp_val += (ind < nnz) ? val[ind] * b[col[ind] * b_stride +
-        // column_id]
-        //                         : zero<ValueType>();
-        // auto next_row = (ind + cuda_config::warp_size < nnz)
-        //                     ? row[ind + cuda_config::warp_size]
-        //                     : row[nnz - 1];
-        // // segmented scan
-        // if (warp::any(curr_row != next_row)) {
-        //     is_first_in_segment = true;
-        //     segment_scan_reverse(curr_row, &temp_val, &is_first_in_segment);
-        //     if (is_first_in_segment) {
-        //         if (curr_row != next_row) {
-        //             // atomic_add(&(c[curr_row * c_stride + column_id]),
-        //             //            scale(temp_val));
-        //             c[curr_row * c_stride + column_id] += scale(temp_val);
-        //             temp_val = zero<ValueType>();
-        //         }
-        //     } else {
-        //         temp_val = zero<ValueType>();
-        //     }
-        // }
-        // curr_row = next_row;
     }
     if (num > 1) {
-        ind = ind_end;
-        process_window<true, false>(num_rows, nnz, ind, &temp_val, &curr_row,
-                                    last_val, last_row, val, col, row, b,
+        process_window<true, false>(num_rows, nnz, ind_end, &temp_val,
+                                    &curr_row, &(last_val[warp_idx]),
+                                    &(last_row[warp_idx]), val, col, row, b,
                                     b_stride, c, c_stride, column_id, scale);
     }
     if (num > 0) {
         ind = ind_end + cuda_config::warp_size;
         process_window<true, true>(num_rows, nnz, ind, &temp_val, &curr_row,
-                                   last_val, last_row, val, col, row, b,
-                                   b_stride, c, c_stride, column_id, scale);
+                                   &(last_val[warp_idx]), &(last_row[warp_idx]),
+                                   val, col, row, b, b_stride, c, c_stride,
+                                   column_id, scale);
     }
-    // if (num > 0) {
-    //     ind = ind_start + (num - 1) * cuda_config::warp_size;
-    //     temp_val += (ind < nnz) ? val[ind] * b[col[ind] * b_stride +
-    //     column_id]
-    //                             : zero<ValueType>();
-    //     // segmented scan
-    //     is_first_in_segment = true;
-    //     segment_scan_reverse(curr_row, &temp_val, &is_first_in_segment);
-    //     if (is_first_in_segment) {
-    //         if (threadIdx.x == cuda_config::warp_size - 1) {
-    //             const auto warp_idx =
-    //                 static_cast<size_type>(blockIdx.x) * blockDim.y +
-    //                 threadIdx.y;
-    //             last_val[warp_idx] = scale(temp_val);
-    //             last_row[warp_idx] = curr_row;
-    //         } else {
-    //             // atomic_add(&(c[curr_row * c_stride + column_id]),
-    //             //            scale(temp_val));
-    //             c[curr_row * c_stride + column_id] += scale(temp_val);
-    //         }
-    //     }
-    // }
 }
 
 
