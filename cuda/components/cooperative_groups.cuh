@@ -254,6 +254,69 @@ using cooperative_groups::coalesced_group;
 // c.c. 7.0 and higher
 // unsigned match_any(T) const
 // unsigned match_all(T) const
+namespace detail {
+
+
+template <typename Group>
+class enable_extended_part_shuffle : public Group {
+public:
+    using Group::Group;
+    using Group::shfl;
+    using Group::shfl_down;
+    using Group::shfl_up;
+
+#define GKO_ENABLE_SHUFFLE_OPERATION(_name, SelectorType)                   \
+    template <typename ValueType>                                           \
+    __device__ __forceinline__ ValueType _name(const ValueType &var,        \
+                                               SelectorType selector) const \
+    {                                                                       \
+        return shuffle_impl(                                                \
+            [this](uint32 v, SelectorType s) {                              \
+                return static_cast<const Group *>(this)->_name(v, s);       \
+            },                                                              \
+            var, selector);                                                 \
+    }
+
+    GKO_ENABLE_SHUFFLE_OPERATION(shfl, uint32)
+    GKO_ENABLE_SHUFFLE_OPERATION(shfl_up, int32)
+    GKO_ENABLE_SHUFFLE_OPERATION(shfl_down, int32)
+
+#undef GKO_ENABLE_SHUFFLE_OPERATION
+
+private:
+    template <typename ShuffleOperator, typename ValueType,
+              typename SelectorType>
+    static __device__ __forceinline__ ValueType
+    shuffle_impl(ShuffleOperator intrinsic_shuffle, const ValueType &var,
+                 SelectorType selector)
+    {
+        static_assert(sizeof(ValueType) % sizeof(uint32) == 0,
+                      "Unable to shuffle sizes which are not 4-byte multiples");
+        constexpr auto value_size = sizeof(ValueType) / sizeof(uint32);
+        ValueType result;
+        auto var_array = reinterpret_cast<const uint32 *>(&var);
+        auto result_array = reinterpret_cast<uint32 *>(&result);
+#pragma unroll
+        for (std::size_t i = 0; i < value_size; ++i) {
+            result_array[i] = intrinsic_shuffle(var_array[i], selector);
+        }
+        return result;
+    }
+};
+
+class controlled_group : public coalesced_group {
+public:
+    __forceinline__ __device__ controlled_group(unsigned int mask) : coalesced_group(mask) {}
+};
+
+}  // namespace detail
+
+struct controlled_group
+    : detail::enable_extended_part_shuffle<detail::controlled_group> {
+    using detail::enable_extended_part_shuffle<
+        detail::controlled_group>::enable_extended_part_shuffle;
+};
+
 
 namespace detail {
 template <>

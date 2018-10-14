@@ -42,6 +42,8 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "cuda/base/math.hpp"
 #include "cuda/base/types.hpp"
 #include "cuda/components/atomic.cuh"
+#include "cuda/components/cooperative_groups.cuh"
+#include "cuda/components/reduction.cuh"
 #include "cuda/components/shuffle.cuh"
 #include "cuda/components/synchronization.cuh"
 
@@ -94,6 +96,66 @@ __device__ __forceinline__ void segment_scan(IndexType ind, ValueType *val,
  * @param c  the output dense vector
  * @param scale  the function on the added value
  */
+// template <typename ValueType, typename IndexType, typename Closure>
+// __device__ void spmv_kernel(const size_type nnz, const size_type num_lines,
+//                             const ValueType *__restrict__ val,
+//                             const IndexType *__restrict__ col,
+//                             const IndexType *__restrict__ row,
+//                             const ValueType *__restrict__ b,
+//                             const size_type b_stride, ValueType *__restrict__
+//                             c, const size_type c_stride, Closure scale)
+// {
+//     ValueType temp_val = zero<ValueType>();
+//     const auto start = static_cast<size_type>(blockDim.x) * blockIdx.x *
+//                            blockDim.y * num_lines +
+//                        threadIdx.y * blockDim.x * num_lines;
+//     const auto column_id = blockIdx.y;
+//     size_type num =
+//         (nnz > start) * ceildiv(nnz - start, cuda_config::warp_size);
+//     num = min(num, num_lines);
+//     const IndexType ind_start = start + threadIdx.x;
+//     const IndexType ind_end = ind_start + (num - 1) * cuda_config::warp_size;
+//     IndexType ind = ind_start;
+//     bool is_first_in_segment = true;
+//     IndexType curr_row = (ind < nnz) ? row[ind] : 0;
+//     for (; ind < ind_end; ind += cuda_config::warp_size) {
+//         temp_val += (ind < nnz) ? val[ind] * b[col[ind] * b_stride +
+//         column_id]
+//                                 : zero<ValueType>();
+//         auto next_row = (ind + cuda_config::warp_size < nnz)
+//                             ? row[ind + cuda_config::warp_size]
+//                             : row[nnz - 1];
+//         // segmented scan
+//         if (warp::any(curr_row != next_row)) {
+//             is_first_in_segment = true;
+//             segment_scan(curr_row, &temp_val, &is_first_in_segment);
+//             if (is_first_in_segment) {
+//                 atomic_add(&(c[curr_row * c_stride + column_id]),
+//                            scale(temp_val));
+//             }
+//             temp_val = zero<ValueType>();
+//         }
+//         curr_row = next_row;
+//     }
+//     if (num > 0) {
+//         ind = ind_start + (num - 1) * cuda_config::warp_size;
+//         temp_val += (ind < nnz) ? val[ind] * b[col[ind] * b_stride +
+//         column_id]
+//                                 : zero<ValueType>();
+//         // segmented scan
+//         is_first_in_segment = true;
+//         segment_scan(curr_row, &temp_val, &is_first_in_segment);
+//         if (is_first_in_segment) {
+//             atomic_add(&(c[curr_row * c_stride + column_id]),
+//             scale(temp_val));
+//         }
+//     }
+// }
+
+
+/**
+ * For Compute Capability 7.x
+ */
 template <typename ValueType, typename IndexType, typename Closure>
 __device__ void spmv_kernel(const size_type nnz, const size_type num_lines,
                             const ValueType *__restrict__ val,
@@ -116,6 +178,8 @@ __device__ void spmv_kernel(const size_type nnz, const size_type num_lines,
     IndexType ind = ind_start;
     bool is_first_in_segment = true;
     IndexType curr_row = (ind < nnz) ? row[ind] : 0;
+    const auto tile_block = group::tiled_partition<cuda_config::warp_size>(
+        group::this_thread_block());
     for (; ind < ind_end; ind += cuda_config::warp_size) {
         temp_val += (ind < nnz) ? val[ind] * b[col[ind] * b_stride + column_id]
                                 : zero<ValueType>();
@@ -124,11 +188,15 @@ __device__ void spmv_kernel(const size_type nnz, const size_type num_lines,
                             : row[nnz - 1];
         // segmented scan
         if (warp::any(curr_row != next_row)) {
-            is_first_in_segment = true;
-            segment_scan(curr_row, &temp_val, &is_first_in_segment);
-            if (is_first_in_segment) {
+            auto reduction_block =
+                group::controlled_group(tile_block.match_any(curr_row));
+            const auto sum_val = local_reduce(
+                reduction_block, temp_val,
+                [](const ValueType &x, const ValueType &y) { return x + y; });
+            // const auto sum_val = zero<ValueType>();
+            if (reduction_block.thread_rank() == 0) {
                 atomic_add(&(c[curr_row * c_stride + column_id]),
-                           scale(temp_val));
+                           scale(sum_val));
             }
             temp_val = zero<ValueType>();
         }
@@ -138,11 +206,12 @@ __device__ void spmv_kernel(const size_type nnz, const size_type num_lines,
         ind = ind_start + (num - 1) * cuda_config::warp_size;
         temp_val += (ind < nnz) ? val[ind] * b[col[ind] * b_stride + column_id]
                                 : zero<ValueType>();
-        // segmented scan
-        is_first_in_segment = true;
-        segment_scan(curr_row, &temp_val, &is_first_in_segment);
-        if (is_first_in_segment) {
-            atomic_add(&(c[curr_row * c_stride + column_id]), scale(temp_val));
+        auto reduction_block =
+            group::controlled_group(tile_block.match_any(curr_row));
+        const auto sum_val = local_reduce(reduction_block, temp_val,
+               [](const ValueType &x, const ValueType &y) { return x + y; });
+        if (reduction_block.thread_rank() == 0) {
+            atomic_add(&(c[curr_row * c_stride + column_id]), scale(sum_val));
         }
     }
 }
