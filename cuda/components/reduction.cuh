@@ -84,17 +84,19 @@ __device__ __forceinline__ ValueType local_reduce(
     const Group &group, ValueType local_data, Operator reduce_op = Operator{})
 {
     int32 sect = group.size();
+    if (sect > 1) {
 #pragma unroll
-    for (int32 i = ceildiv(group.size(), 2); i > 1; i = ceildiv(i, 2)) {
-        const auto remote_data = group.shfl_down(local_data, i);
-        if (group.thread_rank() < sect / 2) {
-            local_data = reduce_op(local_data, remote_data);
+        for (int32 i = ceildiv(group.size(), 2); i > 1; i = ceildiv(i, 2)) {
+            const auto remote_data = group.shfl_down(local_data, i);
+            if (group.thread_rank() < sect / 2) {
+                local_data = reduce_op(local_data, remote_data);
+            }
+            sect = i;
         }
-        sect = i;
-    }
 
-    const auto remote_data = group.shfl_down(local_data, 1);
-    local_data = reduce_op(local_data, remote_data);
+        const auto remote_data = group.shfl_down(local_data, 1);
+        local_data = reduce_op(local_data, remote_data);
+    }
     return local_data;
 }
 
