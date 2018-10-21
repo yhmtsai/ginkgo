@@ -155,6 +155,7 @@ __device__ __forceinline__ void segment_scan(IndexType ind, ValueType *val,
 
 /**
  * For Compute Capability 7.x
+ * Algorithm 2, 3
  */
 template <typename ValueType, typename IndexType, typename Closure>
 __device__ void spmv_kernel(const size_type nnz, const size_type num_lines,
@@ -176,7 +177,6 @@ __device__ void spmv_kernel(const size_type nnz, const size_type num_lines,
     const IndexType ind_start = start + threadIdx.x;
     const IndexType ind_end = ind_start + (num - 1) * cuda_config::warp_size;
     IndexType ind = ind_start;
-    bool is_first_in_segment = true;
     IndexType curr_row = (ind < nnz) ? row[ind] : 0;
     const auto tile_block = group::tiled_partition<cuda_config::warp_size>(
         group::this_thread_block());
@@ -186,10 +186,18 @@ __device__ void spmv_kernel(const size_type nnz, const size_type num_lines,
         auto next_row = (ind + cuda_config::warp_size < nnz)
                             ? row[ind + cuda_config::warp_size]
                             : row[nnz - 1];
-        // segmented scan
-        if (warp::any(curr_row != next_row)) {
+        // Algorithm 2 begin
+        // if (warp::any(curr_row != next_row)) {
+        //     auto reduction_block =
+        //         group::controlled_group(tile_block.match_any(curr_row));
+        // Algorithm 2 end
+        // Algorithm 3 start
+        auto curr_mask = tile_block.match_any(curr_row);
+        if (curr_row != next_row) {
             auto reduction_block =
-                group::controlled_group(tile_block.match_any(curr_row));
+                group::controlled_group(curr_mask & __activemask());
+        // Algorithm 3 end
+            // the same part
             const auto sum_val = local_reduce(
                 reduction_block, temp_val,
                 [](const ValueType &x, const ValueType &y) { return x + y; });
@@ -208,8 +216,9 @@ __device__ void spmv_kernel(const size_type nnz, const size_type num_lines,
                                 : zero<ValueType>();
         auto reduction_block =
             group::controlled_group(tile_block.match_any(curr_row));
-        const auto sum_val = local_reduce(reduction_block, temp_val,
-               [](const ValueType &x, const ValueType &y) { return x + y; });
+        const auto sum_val = local_reduce(
+            reduction_block, temp_val,
+            [](const ValueType &x, const ValueType &y) { return x + y; });
         if (reduction_block.thread_rank() == 0) {
             atomic_add(&(c[curr_row * c_stride + column_id]), scale(sum_val));
         }
